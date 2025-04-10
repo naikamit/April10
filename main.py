@@ -1,95 +1,127 @@
-# main.py
+# main.py - Entry point, FastAPI setup
 import logging
 import os
-from typing import Dict, Any
-
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+import json
+from datetime import datetime
+from fastapi import FastAPI, Request, Form, BackgroundTasks, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi.templating import Jinja2Templates
 import uvicorn
 
-from config import Config
-from dashboard import router as dashboard_router
-from webhook import router as webhook_router
+from config import DASHBOARD_PORT, LONG_SYMBOL, SHORT_SYMBOL
 from state_manager import StateManager
+from signal_processor import SignalProcessor
+from cash_manager import CashManager
+from cooldown_manager import CooldownManager
 
-# Set up logging
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("webhook_service.log")
+        logging.FileHandler('webhook.log')
     ]
 )
 
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
-app = FastAPI(title="Trading Signal Webhook Service")
+# Initialize FastAPI
+app = FastAPI(title="Trading Webhook Service")
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Include routers
-app.include_router(webhook_router)
-app.include_router(dashboard_router)
-
-# Serve static files if directory exists
-if not os.path.exists("static"):
-    os.makedirs("static")
+# Setup templates and static files
+templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.get("/")
-async def root() -> RedirectResponse:
-    """Redirect root to dashboard."""
-    return RedirectResponse(url="/")
-
-@app.get("/health")
-async def health_check() -> Dict[str, Any]:
-    """Health check endpoint."""
-    return {"status": "healthy"}
+# Initialize state
+state_manager = StateManager()
+signal_processor = SignalProcessor()
+cash_manager = CashManager()
+cooldown_manager = CooldownManager()
 
 @app.on_event("startup")
-async def startup_event() -> None:
-    """Initialize application state on startup."""
-    logger.info("Starting webhook service")
-    
-    # Initialize configuration and state
-    config = Config()
-    state_manager = StateManager()
-    
-    logger.info(f"Long symbol: {config.get('LONG_SYMBOL')}")
-    logger.info(f"Short symbol: {config.get('SHORT_SYMBOL')}")
-    logger.info(f"Cooldown period: {config.get('COOLDOWN_PERIOD_HOURS')} hours")
-    logger.info(f"Initial cash balance: ${config.get('INITIAL_CASH_BALANCE'):.2f}")
-    
-    # Log cooldown status
-    cooldown_info = state_manager.get_cooldown_info()
-    if cooldown_info["active"]:
-        logger.info(f"Cooldown active: {cooldown_info['remaining_formatted']} remaining")
-    else:
-        logger.info("No cooldown active")
+async def startup_event():
+    logger.info("Starting Trading Webhook Service")
+    logger.info(f"Long Symbol: {LONG_SYMBOL}")
+    logger.info(f"Short Symbol: {SHORT_SYMBOL}")
 
-@app.on_event("shutdown")
-async def shutdown_event() -> None:
-    """Perform cleanup operations on shutdown."""
-    logger.info("Shutting down webhook service")
+@app.post("/webhook")
+async def webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    Webhook endpoint to receive signals
+    """
+    try:
+        payload = await request.json()
+        logger.info(f"Received webhook: {payload}")
+        
+        signal = payload.get("signal")
+        if not signal:
+            raise HTTPException(status_code=400, detail="Missing 'signal' field")
+            
+        if signal not in ["long", "short"]:
+            raise HTTPException(status_code=400, detail=f"Invalid signal: {signal}")
+        
+        # Process signal in background to avoid webhook timeout
+        background_tasks.add_task(signal_processor.process_signal, signal)
+        
+        return {"status": "processing", "signal": signal}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except Exception as e:
+        logger.exception(f"Error processing webhook: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """
+    Dashboard to display system status
+    """
+    cash_info = state_manager.get_cash_balance_info()
+    cooldown_info = cooldown_manager.get_cooldown_info()
+    api_calls = state_manager.get_api_calls()
+    
+    return templates.TemplateResponse(
+        "index.html", 
+        {
+            "request": request,
+            "cash_info": cash_info,
+            "cooldown_info": cooldown_info,
+            "api_calls": api_calls,
+            "long_symbol": LONG_SYMBOL,
+            "short_symbol": SHORT_SYMBOL,
+            "is_processing": state_manager.is_currently_processing()
+        }
+    )
+
+@app.post("/update-cash")
+async def update_cash(cash_amount: float = Form(...)):
+    """
+    Update cash balance manually
+    """
+    success = cash_manager.update_balance_manual(cash_amount)
+    if success:
+        return {"status": "success", "cash_balance": cash_amount}
+    else:
+        raise HTTPException(status_code=400, detail="Invalid cash amount")
+
+@app.get("/status")
+async def status():
+    """
+    Get current system status
+    """
+    cash_info = state_manager.get_cash_balance_info()
+    cooldown_info = cooldown_manager.get_cooldown_info()
+    
+    return {
+        "status": "ok",
+        "cash_balance": cash_info,
+        "cooldown": cooldown_info,
+        "is_processing": state_manager.is_currently_processing(),
+        "long_symbol": LONG_SYMBOL,
+        "short_symbol": SHORT_SYMBOL
+    }
 
 if __name__ == "__main__":
-    # Get configuration
-    config = Config()
-    host = config.get("HOST")
-    port = config.get("PORT")
-    
-    # Start server
-    logger.info(f"Starting server on {host}:{port}")
-    uvicorn.run("main:app", host=host, port=port, reload=False)
+    port = int(os.environ.get("PORT", DASHBOARD_PORT))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
