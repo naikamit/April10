@@ -3,6 +3,7 @@ import logging
 import os
 import json
 from datetime import datetime
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form, BackgroundTasks, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,20 +28,13 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI
-app = FastAPI(title="Trading Webhook Service")
-
-# Setup templates and static files
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
 # Initialize state
 state_manager = StateManager()
 signal_processor = SignalProcessor()
 cash_manager = CashManager()
 cooldown_manager = CooldownManager()
 
-@app.lifespan
+@asynccontextmanager
 async def lifespan(app):
     # Startup event
     logger.info("Starting Trading Webhook Service")
@@ -51,6 +45,13 @@ async def lifespan(app):
     
     # Shutdown event
     logger.info("Shutting down Trading Webhook Service")
+
+# Initialize FastAPI
+app = FastAPI(title="Trading Webhook Service", lifespan=lifespan)
+
+# Setup templates and static files
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.post("/webhook")
 async def webhook(request: Request, background_tasks: BackgroundTasks):
