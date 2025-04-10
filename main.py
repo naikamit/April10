@@ -40,11 +40,17 @@ signal_processor = SignalProcessor()
 cash_manager = CashManager()
 cooldown_manager = CooldownManager()
 
-@app.on_event("startup")
-async def startup_event():
+@app.lifespan
+async def lifespan(app):
+    # Startup event
     logger.info("Starting Trading Webhook Service")
     logger.info(f"Long Symbol: {LONG_SYMBOL}")
     logger.info(f"Short Symbol: {SHORT_SYMBOL}")
+    
+    yield
+    
+    # Shutdown event
+    logger.info("Shutting down Trading Webhook Service")
 
 @app.post("/webhook")
 async def webhook(request: Request, background_tasks: BackgroundTasks):
