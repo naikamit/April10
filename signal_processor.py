@@ -68,46 +68,46 @@ class SignalProcessor:
     async def _process_long_signal(self):
         """
         Process a long signal:
-        1. Buy long symbol (if not null)
-        2. Close short positions
+        1. Close short positions
+        2. Buy long symbol (if not null)
         """
         logger.info("Processing long signal")
         
-        # 1. Buy long symbol if not null
+        # 1. Close short positions
+        if SHORT_SYMBOL:
+            await self._close_symbol_position(SHORT_SYMBOL)
+        else:
+            logger.info("Short symbol is null, skipping close")
+        
+        # 2. Buy long symbol if not null
         if LONG_SYMBOL:
             await self._buy_symbol(LONG_SYMBOL)
             # Pause for 3 seconds as specified in requirements
             await asyncio.sleep(3)
         else:
             logger.info("Long symbol is null, skipping buy")
-        
-        # 2. Close short positions
-        if SHORT_SYMBOL:
-            await self._close_symbol_position(SHORT_SYMBOL)
-        else:
-            logger.info("Short symbol is null, skipping close")
 
     async def _process_short_signal(self):
         """
         Process a short signal:
-        1. Buy short symbol (if not null)
-        2. Close long positions
+        1. Close long positions
+        2. Buy short symbol (if not null)
         """
         logger.info("Processing short signal")
         
-        # 1. Buy short symbol if not null
+        # 1. Close long positions
+        if LONG_SYMBOL:
+            await self._close_symbol_position(LONG_SYMBOL)
+        else:
+            logger.info("Long symbol is null, skipping close")
+        
+        # 2. Buy short symbol if not null
         if SHORT_SYMBOL:
             await self._buy_symbol(SHORT_SYMBOL)
             # Pause for 3 seconds as specified in requirements
             await asyncio.sleep(3)
         else:
             logger.info("Short symbol is null, skipping buy")
-        
-        # 2. Close long positions
-        if LONG_SYMBOL:
-            await self._close_symbol_position(LONG_SYMBOL)
-        else:
-            logger.info("Long symbol is null, skipping close")
 
     async def _close_all_positions(self):
         """
