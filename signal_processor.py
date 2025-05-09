@@ -54,9 +54,8 @@ class SignalProcessor:
                     self.state_manager.set_processing(False)
                     return {"status": "error", "reason": f"Unknown signal type: {signal_type}"}
             else:
-                # In cooldown period, close all positions
-                logger.info("In cooldown period, closing all positions")
-                await self._close_all_positions()
+                # In cooldown period, do nothing
+                logger.info("In cooldown period, ignoring signal")
                 
             self.state_manager.set_processing(False)
             return {"status": "success"}
