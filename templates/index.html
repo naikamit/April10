@@ -40,11 +40,11 @@
                     <div class="symbols-form-group">
                         <div class="form-field">
                             <label for="long_symbol">Long Symbol:</label>
-                            <input type="text" name="long_symbol" id="long_symbol" placeholder="e.g., MSTU" onkeypress="if(event.key==='Enter') updateSymbols()">
+                            <input type="text" name="long_symbol" id="long_symbol" placeholder="e.g., MSTU" onkeypress="if(event.key===&quot;Enter&quot;) updateSymbols()">
                         </div>
                         <div class="form-field">
                             <label for="short_symbol">Short Symbol:</label>
-                            <input type="text" name="short_symbol" id="short_symbol" placeholder="e.g., MSTZ" onkeypress="if(event.key==='Enter') updateSymbols()">
+                            <input type="text" name="short_symbol" id="short_symbol" placeholder="e.g., MSTZ" onkeypress="if(event.key===&quot;Enter&quot;) updateSymbols()">
                         </div>
                         <button type="button" onclick="updateSymbols()">Update Symbols</button>
                     </div>
@@ -64,7 +64,7 @@
                 <form id="cash-form" class="update-form">
                     <h3>Update Cash Balance</h3>
                     <div class="form-group">
-                        <input type="number" id="cash_amount" step="0.01" required placeholder="Enter new balance" onkeypress="if(event.key==='Enter') updateCash()">
+                        <input type="number" id="cash_amount" step="0.01" required placeholder="Enter new balance" onkeypress="if(event.key===&quot;Enter&quot;) updateCash()">
                         <button type="button" onclick="updateCash()">Update</button>
                     </div>
                 </form>
