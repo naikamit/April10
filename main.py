@@ -161,6 +161,88 @@ async def stop_cooldown():
         logger.exception(f"Error stopping cooldown: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/debug")
+async def debug_log(request: Request):
+    """
+    Debug endpoint to log JavaScript activity
+    """
+    try:
+        payload = await request.json()
+        message = payload.get("message", "No message")
+        logger.info(f"🔥 JAVASCRIPT DEBUG: {message}")
+        return {"status": "logged", "message": message}
+    except Exception as e:
+        logger.info(f"🔥 JAVASCRIPT DEBUG (text): {await request.body()}")
+        return {"status": "logged"}
+
+@app.get("/debug-test")
+async def debug_test():
+    """
+    Simple debug test endpoint
+    """
+    logger.info("🔥 DEBUG TEST ENDPOINT CALLED - JavaScript is working!")
+    return {"status": "success", "message": "Debug test successful"}
+
+@app.post("/force-long")
+async def force_long(background_tasks: BackgroundTasks):
+    """
+    Manually force a long position (bypasses cooldown)
+    """
+    try:
+        logger.info("Manual force long initiated")
+        
+        # Check if already processing
+        if state_manager.is_currently_processing():
+            return {"status": "error", "message": "Already processing a signal"}
+        
+        # Process long signal in background (bypass cooldown)
+        background_tasks.add_task(signal_processor._process_long_signal)
+        
+        return {"status": "success", "message": "Force long initiated"}
+    except Exception as e:
+        logger.exception(f"Error in force long: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/force-short")
+async def force_short(background_tasks: BackgroundTasks):
+    """
+    Manually force a short position (bypasses cooldown)
+    """
+    try:
+        logger.info("Manual force short initiated")
+        
+        # Check if already processing
+        if state_manager.is_currently_processing():
+            return {"status": "error", "message": "Already processing a signal"}
+        
+        # Process short signal in background (bypass cooldown)
+        background_tasks.add_task(signal_processor._process_short_signal)
+        
+        return {"status": "success", "message": "Force short initiated"}
+    except Exception as e:
+        logger.exception(f"Error in force short: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/force-close")
+async def force_close(background_tasks: BackgroundTasks):
+    """
+    Manually close all positions (bypasses cooldown)
+    """
+    try:
+        logger.info("Manual force close all positions initiated")
+        
+        # Check if already processing
+        if state_manager.is_currently_processing():
+            return {"status": "error", "message": "Already processing a signal"}
+        
+        # Close all positions in background (bypass cooldown)
+        background_tasks.add_task(signal_processor._close_all_positions)
+        
+        return {"status": "success", "message": "Force close all initiated"}
+    except Exception as e:
+        logger.exception(f"Error in force close: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/status")
 async def status():
     """
