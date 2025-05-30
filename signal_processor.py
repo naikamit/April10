@@ -3,10 +3,7 @@ import logging
 import asyncio
 from typing import Dict, Any, Optional
 
-from config import (
-    LONG_SYMBOL, SHORT_SYMBOL, BUY_RETRY_REDUCTION_PERCENT, 
-    MAX_BUY_RETRIES
-)
+from config import BUY_RETRY_REDUCTION_PERCENT, MAX_BUY_RETRIES
 from state_manager import StateManager
 from api_client import SignalStackClient
 from cash_manager import CashManager
@@ -73,15 +70,20 @@ class SignalProcessor:
         """
         logger.info("Processing long signal")
         
+        # Get current symbols
+        symbols = self.state_manager.get_symbols()
+        long_symbol = symbols["long_symbol"]
+        short_symbol = symbols["short_symbol"]
+        
         # 1. Close short positions
-        if SHORT_SYMBOL:
-            await self._close_symbol_position(SHORT_SYMBOL)
+        if short_symbol:
+            await self._close_symbol_position(short_symbol)
         else:
             logger.info("Short symbol is null, skipping close")
         
         # 2. Buy long symbol if not null
-        if LONG_SYMBOL:
-            await self._buy_symbol(LONG_SYMBOL)
+        if long_symbol:
+            await self._buy_symbol(long_symbol)
             # Pause for 3 seconds as specified in requirements
             await asyncio.sleep(3)
         else:
@@ -95,15 +97,20 @@ class SignalProcessor:
         """
         logger.info("Processing short signal")
         
+        # Get current symbols
+        symbols = self.state_manager.get_symbols()
+        long_symbol = symbols["long_symbol"]
+        short_symbol = symbols["short_symbol"]
+        
         # 1. Close long positions
-        if LONG_SYMBOL:
-            await self._close_symbol_position(LONG_SYMBOL)
+        if long_symbol:
+            await self._close_symbol_position(long_symbol)
         else:
             logger.info("Long symbol is null, skipping close")
         
         # 2. Buy short symbol if not null
-        if SHORT_SYMBOL:
-            await self._buy_symbol(SHORT_SYMBOL)
+        if short_symbol:
+            await self._buy_symbol(short_symbol)
             # Pause for 3 seconds as specified in requirements
             await asyncio.sleep(3)
         else:
@@ -115,15 +122,20 @@ class SignalProcessor:
         """
         logger.info("Closing all positions")
         
+        # Get current symbols
+        symbols = self.state_manager.get_symbols()
+        long_symbol = symbols["long_symbol"]
+        short_symbol = symbols["short_symbol"]
+        
         close_tasks = []
         
         # Close long positions if symbol is not null
-        if LONG_SYMBOL:
-            close_tasks.append(self._close_symbol_position(LONG_SYMBOL))
+        if long_symbol:
+            close_tasks.append(self._close_symbol_position(long_symbol))
         
         # Close short positions if symbol is not null
-        if SHORT_SYMBOL:
-            close_tasks.append(self._close_symbol_position(SHORT_SYMBOL))
+        if short_symbol:
+            close_tasks.append(self._close_symbol_position(short_symbol))
         
         # Wait for all close tasks to complete
         if close_tasks:
