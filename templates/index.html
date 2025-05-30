@@ -139,7 +139,96 @@
         </div>
     </div>
     
+    <!-- Toast notification container -->
+    <div id="toast-container"></div>
+
     <script>
+        // Toast notification system
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            
+            container.appendChild(toast);
+            
+            // Trigger animation
+            setTimeout(() => toast.classList.add('show'), 100);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => container.removeChild(toast), 300);
+            }, 3000);
+        }
+
+        // Handle symbol form submission
+        document.querySelector('form[action="/update-symbols"]').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const longSymbol = formData.get('long_symbol');
+            const shortSymbol = formData.get('short_symbol');
+            
+            showToast('Updating symbols...', 'info');
+            
+            try {
+                const response = await fetch('/update-symbols', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showToast(`Symbols updated: Long=${result.symbols.long_symbol || 'None'}, Short=${result.symbols.short_symbol || 'None'}`, 'success');
+                    
+                    // Update displayed values
+                    document.querySelector('.symbol-item:first-child .symbol-value').textContent = 
+                        result.symbols.long_symbol || 'Not set';
+                    document.querySelector('.symbol-item:last-child .symbol-value').textContent = 
+                        result.symbols.short_symbol || 'Not set';
+                } else {
+                    const error = await response.json();
+                    showToast(`Error: ${error.detail}`, 'error');
+                }
+            } catch (error) {
+                showToast('Network error occurred', 'error');
+            }
+        });
+
+        // Handle cash form submission
+        document.querySelector('form[action="/update-cash"]').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const cashAmount = formData.get('cash_amount');
+            
+            showToast('Updating cash balance...', 'info');
+            
+            try {
+                const response = await fetch('/update-cash', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showToast(`Cash balance updated to ${result.cash_balance.toFixed(2)}`, 'success');
+                    
+                    // Update displayed value
+                    document.querySelector('.cash-amount').textContent = `${result.cash_balance.toFixed(2)}`;
+                    
+                    // Reset form
+                    this.reset();
+                } else {
+                    const error = await response.json();
+                    showToast(`Error: ${error.detail}`, 'error');
+                }
+            } catch (error) {
+                showToast('Network error occurred', 'error');
+            }
+        });
+
         // Automatically refresh the page every minute
         setTimeout(function() {
             window.location.reload();
