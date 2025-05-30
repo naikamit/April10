@@ -25,9 +25,9 @@ class StateManager:
         self.cooldown_end_time = None
         self.api_calls = []
         self.is_processing = False
-        # Initialize symbols with default values - will be set from config on startup
-        self.long_symbol = "MSTU"
-        self.short_symbol = "MSTZ"
+        # Initialize symbols as None - will be set from config on startup
+        self.long_symbol = None
+        self.short_symbol = None
 
     def update_cash_balance(self, amount, source="system"):
         """Update the cash balance with the given amount"""
