@@ -40,11 +40,11 @@
                     <div class="symbols-form-group">
                         <div class="form-field">
                             <label for="long_symbol">Long Symbol:</label>
-                            <input type="text" name="long_symbol" id="long_symbol" placeholder="e.g., MSTU">
+                            <input type="text" name="long_symbol" id="long_symbol" placeholder="e.g., MSTU" onkeypress="if(event.key==='Enter') updateSymbols()">
                         </div>
                         <div class="form-field">
                             <label for="short_symbol">Short Symbol:</label>
-                            <input type="text" name="short_symbol" id="short_symbol" placeholder="e.g., MSTZ">
+                            <input type="text" name="short_symbol" id="short_symbol" placeholder="e.g., MSTZ" onkeypress="if(event.key==='Enter') updateSymbols()">
                         </div>
                         <button type="button" onclick="updateSymbols()">Update Symbols</button>
                     </div>
@@ -64,7 +64,7 @@
                 <form id="cash-form" class="update-form">
                     <h3>Update Cash Balance</h3>
                     <div class="form-group">
-                        <input type="number" id="cash_amount" step="0.01" required placeholder="Enter new balance">
+                        <input type="number" id="cash_amount" step="0.01" required placeholder="Enter new balance" onkeypress="if(event.key==='Enter') updateCash()">
                         <button type="button" onclick="updateCash()">Update</button>
                     </div>
                 </form>
@@ -96,8 +96,6 @@
 
     <script>
         function updateSymbols() {
-            alert('updateSymbols called!');
-            
             var longSymbol = document.getElementById('long_symbol').value;
             var shortSymbol = document.getElementById('short_symbol').value;
             
@@ -113,16 +111,23 @@
                 return response.json();
             })
             .then(function(result) {
-                alert('Symbols updated: ' + JSON.stringify(result));
+                if (result.status === 'success') {
+                    // Update display values
+                    var symbolValues = document.querySelectorAll('.symbol-value');
+                    if (symbolValues[0]) symbolValues[0].textContent = result.symbols.long_symbol || 'Not set';
+                    if (symbolValues[1]) symbolValues[1].textContent = result.symbols.short_symbol || 'Not set';
+                    
+                    // Clear the input fields
+                    document.getElementById('long_symbol').value = '';
+                    document.getElementById('short_symbol').value = '';
+                }
             })
             .catch(function(error) {
-                alert('Error: ' + error);
+                alert('Error updating symbols: ' + error);
             });
         }
         
         function updateCash() {
-            alert('updateCash called!');
-            
             var cashAmount = document.getElementById('cash_amount').value;
             if (!cashAmount) {
                 alert('Please enter a cash amount');
@@ -140,16 +145,24 @@
                 return response.json();
             })
             .then(function(result) {
-                alert('Cash updated: ' + JSON.stringify(result));
+                if (result.status === 'success') {
+                    // Update display value
+                    var cashDisplay = document.querySelector('.cash-amount');
+                    if (cashDisplay) cashDisplay.textContent = '
+    </script>
+</body>
+</html> + result.cash_balance.toFixed(2);
+                    
+                    // Clear the input field
+                    document.getElementById('cash_amount').value = '';
+                }
             })
             .catch(function(error) {
-                alert('Error: ' + error);
+                alert('Error updating cash: ' + error);
             });
         }
         
         function startCooldown() {
-            alert('startCooldown called!');
-            
             fetch('/start-cooldown', {
                 method: 'POST',
                 headers: {
@@ -160,16 +173,21 @@
                 return response.json();
             })
             .then(function(result) {
-                alert('Cooldown started: ' + JSON.stringify(result));
+                if (result.status === 'success' && result.cooldown.active) {
+                    // Update cooldown display
+                    var statusDiv = document.querySelector('.cooldown-card > div:first-child');
+                    if (statusDiv) {
+                        statusDiv.className = 'cooldown-active';
+                        statusDiv.innerHTML = '<div class="cooldown-label">Cooldown Active</div><div class="cooldown-timer">Time remaining: ' + result.cooldown.remaining.hours + 'h ' + result.cooldown.remaining.minutes + 'm</div>';
+                    }
+                }
             })
             .catch(function(error) {
-                alert('Error: ' + error);
+                alert('Error starting cooldown: ' + error);
             });
         }
         
         function stopCooldown() {
-            alert('stopCooldown called!');
-            
             fetch('/stop-cooldown', {
                 method: 'POST',
                 headers: {
@@ -180,10 +198,17 @@
                 return response.json();
             })
             .then(function(result) {
-                alert('Cooldown stopped: ' + JSON.stringify(result));
+                if (result.status === 'success') {
+                    // Update cooldown display
+                    var statusDiv = document.querySelector('.cooldown-card > div:first-child');
+                    if (statusDiv) {
+                        statusDiv.className = 'cooldown-inactive';
+                        statusDiv.innerHTML = '<div class="cooldown-label">Cooldown Inactive</div><div>Ready to process signals normally</div>';
+                    }
+                }
             })
             .catch(function(error) {
-                alert('Error: ' + error);
+                alert('Error stopping cooldown: ' + error);
             });
         }
     </script>
