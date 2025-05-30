@@ -25,6 +25,9 @@ class StateManager:
         self.cooldown_end_time = None
         self.api_calls = []
         self.is_processing = False
+        # Initialize symbols with default values - will be set from config on startup
+        self.long_symbol = "MSTU"
+        self.short_symbol = "MSTZ"
 
     def update_cash_balance(self, amount, source="system"):
         """Update the cash balance with the given amount"""
@@ -102,3 +105,21 @@ class StateManager:
         """Check if we're currently processing a signal"""
         with self._lock:
             return self.is_processing
+
+    def set_symbols(self, long_symbol=None, short_symbol=None):
+        """Set the trading symbols"""
+        with self._lock:
+            if long_symbol is not None:
+                self.long_symbol = long_symbol.strip() if long_symbol.strip() else None
+                logger.info(f"Long symbol updated to: {self.long_symbol}")
+            if short_symbol is not None:
+                self.short_symbol = short_symbol.strip() if short_symbol.strip() else None
+                logger.info(f"Short symbol updated to: {self.short_symbol}")
+
+    def get_symbols(self):
+        """Get the current trading symbols"""
+        with self._lock:
+            return {
+                "long_symbol": self.long_symbol,
+                "short_symbol": self.short_symbol
+            }
