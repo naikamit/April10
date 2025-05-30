@@ -78,6 +78,7 @@ h2 {
 
 .status-section,
 .symbols-section,
+.manual-section,
 .cash-section,
 .cooldown-section,
 .api-section {
@@ -91,6 +92,7 @@ h2 {
 
 .status-card,
 .symbols-card,
+.manual-card,
 .cash-card,
 .cooldown-card {
     background-color: #334155;
@@ -226,6 +228,75 @@ button:disabled {
 .symbols-form-group button {
     align-self: flex-start;
     margin-top: 10px;
+}
+
+.manual-warning {
+    background-color: #451a03;
+    border: 1px solid #f59e0b;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 15px;
+    color: #fbbf24;
+    font-size: 0.9rem;
+}
+
+.manual-controls {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
+
+.manual-btn {
+    background-color: #6b7280;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: 500;
+    min-width: 120px;
+}
+
+.manual-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.manual-btn:active {
+    transform: translateY(0);
+}
+
+.manual-btn:disabled {
+    background-color: #4b5563;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.force-long {
+    background-color: #059669;
+}
+
+.force-long:hover {
+    background-color: #047857;
+}
+
+.force-short {
+    background-color: #dc2626;
+}
+
+.force-short:hover {
+    background-color: #b91c1c;
+}
+
+.force-close {
+    background-color: #f59e0b;
+    color: #000;
+}
+
+.force-close:hover {
+    background-color: #d97706;
 }
 
 .cooldown-active {
