@@ -249,6 +249,35 @@ button:disabled {
     margin: 10px 0;
 }
 
+.cooldown-controls {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #475569;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.cooldown-btn {
+    background-color: #374151;
+    color: #e4e4e7;
+    border: 1px solid #6b7280;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 0.9rem;
+}
+
+.cooldown-btn:hover {
+    background-color: #4b5563;
+    border-color: #9ca3af;
+}
+
+.cooldown-btn:active {
+    transform: translateY(1px);
+}
+
 .api-calls {
     display: flex;
     flex-direction: column;
