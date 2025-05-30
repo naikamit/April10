@@ -1,3 +1,4 @@
+<!-- templates/index.html - Dashboard template -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,236 +7,6 @@
     <title>Trading Webhook Dashboard</title>
     <link rel="stylesheet" href="/static/style.css">
     <meta http-equiv="refresh" content="60">
-    <script>
-        function updateSymbols() {
-            var longSymbol = document.getElementById('long_symbol').value;
-            var shortSymbol = document.getElementById('short_symbol').value;
-            var formData = new FormData();
-            formData.append('long_symbol', longSymbol);
-            formData.append('short_symbol', shortSymbol);
-            fetch('/update-symbols', {method: 'POST', body: formData}).then(function(response) {return response.json();}).then(function(result) {if (result.status === 'success') {var symbolValues = document.querySelectorAll('.symbol-value'); if (symbolValues[0]) symbolValues[0].textContent = result.symbols.long_symbol || 'Not set'; if (symbolValues[1]) symbolValues[1].textContent = result.symbols.short_symbol || 'Not set'; document.getElementById('long_symbol').value = ''; document.getElementById('short_symbol').value = '';}}).catch(function(error) {alert('Error updating symbols: ' + error);});
-        }
-        function updateCash() {
-            var cashAmount = document.getElementById('cash_amount').value;
-            if (!cashAmount) {alert('Please enter a cash amount'); return;}
-            var formData = new FormData();
-            formData.append('cash_amount', cashAmount);
-            fetch('/update-cash', {method: 'POST', body: formData}).then(function(response) {return response.json();}).then(function(result) {if (result.status === 'success') {var cashDisplay = document.querySelector('.cash-amount'); if (cashDisplay) cashDisplay.textContent = '
-<body>
-    <div id="toast-container"></div>
-
-    <div class="container">
-        <div class="status-section">
-            <h2>System Status</h2>
-            <div class="status-card">
-                <div class="status-item">
-                    <span class="label">Processing Signal:</span>
-                    <span class="value">No</span>
-                </div>
-            </div>
-        </div>
-        
-        <div class="symbols-section">
-            <h2>Trading Symbols</h2>
-            <div class="symbols-card">
-                <div class="symbol-display">
-                    <div class="symbol-item">
-                        <span class="label">Long Symbol:</span>
-                        <span class="symbol-value">Not set</span>
-                    </div>
-                    <div class="symbol-item">
-                        <span class="label">Short Symbol:</span>
-                        <span class="symbol-value">Not set</span>
-                    </div>
-                </div>
-                
-                <form id="symbol-form" class="update-form">
-                    <h3>Update Trading Symbols</h3>
-                    <div class="symbols-form-group">
-                        <div class="form-field">
-                            <label for="long_symbol">Long Symbol:</label>
-                            <input type="text" name="long_symbol" id="long_symbol" placeholder="e.g., MSTU" onkeypress="if(event.key===&quot;Enter&quot;) updateSymbols()">
-                        </div>
-                        <div class="form-field">
-                            <label for="short_symbol">Short Symbol:</label>
-                            <input type="text" name="short_symbol" id="short_symbol" placeholder="e.g., MSTZ" onkeypress="if(event.key===&quot;Enter&quot;) updateSymbols()">
-                        </div>
-                        <button type="button" onclick="updateSymbols()">Update Symbols</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-        
-        <div class="cash-section">
-            <h2>Cash Balance</h2>
-            <div class="cash-card">
-                <div class="cash-amount">$0.00</div>
-                <div class="cash-details">
-                    <div>Source: system</div>
-                    <div>Last updated: 0 minutes ago</div>
-                </div>
-                
-                <form id="cash-form" class="update-form">
-                    <h3>Update Cash Balance</h3>
-                    <div class="form-group">
-                        <input type="number" id="cash_amount" step="0.01" required placeholder="Enter new balance" onkeypress="if(event.key===&quot;Enter&quot;) updateCash()">
-                        <button type="button" onclick="updateCash()">Update</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-        
-        <div class="cooldown-section">
-            <h2>Cooldown Status</h2>
-            <div class="cooldown-card">
-                <div class="cooldown-inactive">
-                    <div class="cooldown-label">Cooldown Inactive</div>
-                    <div>Ready to process signals normally</div>
-                </div>
-                
-                <div class="cooldown-controls">
-                    <button type="button" class="cooldown-btn" onclick="startCooldown()">Start Cooldown</button>
-                    <button type="button" class="cooldown-btn" onclick="stopCooldown()">Stop Cooldown</button>
-                </div>
-            </div>
-        </div>
-        
-        <div class="api-section">
-            <h2>API Call History</h2>
-            <div class="api-calls">
-                <div class="no-api-calls">No API calls recorded yet</div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        function updateSymbols() {
-            var longSymbol = document.getElementById('long_symbol').value;
-            var shortSymbol = document.getElementById('short_symbol').value;
-            
-            var formData = new FormData();
-            formData.append('long_symbol', longSymbol);
-            formData.append('short_symbol', shortSymbol);
-            
-            fetch('/update-symbols', {
-                method: 'POST',
-                body: formData
-            })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(result) {
-                if (result.status === 'success') {
-                    // Update display values
-                    var symbolValues = document.querySelectorAll('.symbol-value');
-                    if (symbolValues[0]) symbolValues[0].textContent = result.symbols.long_symbol || 'Not set';
-                    if (symbolValues[1]) symbolValues[1].textContent = result.symbols.short_symbol || 'Not set';
-                    
-                    // Clear the input fields
-                    document.getElementById('long_symbol').value = '';
-                    document.getElementById('short_symbol').value = '';
-                }
-            })
-            .catch(function(error) {
-                alert('Error updating symbols: ' + error);
-            });
-        }
-        
-        function updateCash() {
-            var cashAmount = document.getElementById('cash_amount').value;
-            if (!cashAmount) {
-                alert('Please enter a cash amount');
-                return;
-            }
-            
-            var formData = new FormData();
-            formData.append('cash_amount', cashAmount);
-            
-            fetch('/update-cash', {
-                method: 'POST',
-                body: formData
-            })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(result) {
-                if (result.status === 'success') {
-                    // Update display value
-                    var cashDisplay = document.querySelector('.cash-amount');
-                    if (cashDisplay) cashDisplay.textContent = '
-    </script>
-</body>
-</html> + result.cash_balance.toFixed(2);
-                    
-                    // Clear the input field
-                    document.getElementById('cash_amount').value = '';
-                }
-            })
-            .catch(function(error) {
-                alert('Error updating cash: ' + error);
-            });
-        }
-        
-        function startCooldown() {
-            fetch('/start-cooldown', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(result) {
-                if (result.status === 'success' && result.cooldown.active) {
-                    // Update cooldown display
-                    var statusDiv = document.querySelector('.cooldown-card > div:first-child');
-                    if (statusDiv) {
-                        statusDiv.className = 'cooldown-active';
-                        statusDiv.innerHTML = '<div class="cooldown-label">Cooldown Active</div><div class="cooldown-timer">Time remaining: ' + result.cooldown.remaining.hours + 'h ' + result.cooldown.remaining.minutes + 'm</div>';
-                    }
-                }
-            })
-            .catch(function(error) {
-                alert('Error starting cooldown: ' + error);
-            });
-        }
-        
-        function stopCooldown() {
-            fetch('/stop-cooldown', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(result) {
-                if (result.status === 'success') {
-                    // Update cooldown display
-                    var statusDiv = document.querySelector('.cooldown-card > div:first-child');
-                    if (statusDiv) {
-                        statusDiv.className = 'cooldown-inactive';
-                        statusDiv.innerHTML = '<div class="cooldown-label">Cooldown Inactive</div><div>Ready to process signals normally</div>';
-                    }
-                }
-            })
-            .catch(function(error) {
-                alert('Error stopping cooldown: ' + error);
-            });
-        }
-    </script>
-</body>
-</html> + result.cash_balance.toFixed(2); document.getElementById('cash_amount').value = '';}}).catch(function(error) {alert('Error updating cash: ' + error);});
-        }
-        function startCooldown() {
-            fetch('/start-cooldown', {method: 'POST', headers: {'Content-Type': 'application/json'}}).then(function(response) {return response.json();}).then(function(result) {if (result.status === 'success' && result.cooldown.active) {var statusDiv = document.querySelector('.cooldown-card > div:first-child'); if (statusDiv) {statusDiv.className = 'cooldown-active'; statusDiv.innerHTML = '<div class="cooldown-label">Cooldown Active</div><div class="cooldown-timer">Time remaining: ' + result.cooldown.remaining.hours + 'h ' + result.cooldown.remaining.minutes + 'm</div>';}}}).catch(function(error) {alert('Error starting cooldown: ' + error);});
-        }
-        function stopCooldown() {
-            fetch('/stop-cooldown', {method: 'POST', headers: {'Content-Type': 'application/json'}}).then(function(response) {return response.json();}).then(function(result) {if (result.status === 'success') {var statusDiv = document.querySelector('.cooldown-card > div:first-child'); if (statusDiv) {statusDiv.className = 'cooldown-inactive'; statusDiv.innerHTML = '<div class="cooldown-label">Cooldown Inactive</div><div>Ready to process signals normally</div>';}}}).catch(function(error) {alert('Error stopping cooldown: ' + error);});
-        }
-    </script>
 </head>
 <body>
     <div id="toast-container"></div>
@@ -246,7 +17,9 @@
             <div class="status-card">
                 <div class="status-item">
                     <span class="label">Processing Signal:</span>
-                    <span class="value">No</span>
+                    <span class="value {% if is_processing %}active{% endif %}">
+                        {{ "Yes" if is_processing else "No" }}
+                    </span>
                 </div>
             </div>
         </div>
@@ -257,11 +30,11 @@
                 <div class="symbol-display">
                     <div class="symbol-item">
                         <span class="label">Long Symbol:</span>
-                        <span class="symbol-value">Not set</span>
+                        <span class="symbol-value">{{ long_symbol if long_symbol else "Not set" }}</span>
                     </div>
                     <div class="symbol-item">
                         <span class="label">Short Symbol:</span>
-                        <span class="symbol-value">Not set</span>
+                        <span class="symbol-value">{{ short_symbol if short_symbol else "Not set" }}</span>
                     </div>
                 </div>
                 
@@ -270,11 +43,17 @@
                     <div class="symbols-form-group">
                         <div class="form-field">
                             <label for="long_symbol">Long Symbol:</label>
-                            <input type="text" name="long_symbol" id="long_symbol" placeholder="e.g., MSTU" onkeypress="if(event.key===&quot;Enter&quot;) updateSymbols()">
+                            <input type="text" name="long_symbol" id="long_symbol" 
+                                   value="{{ long_symbol if long_symbol else '' }}" 
+                                   placeholder="e.g., MSTU"
+                                   onkeypress="if(event.key==='Enter') updateSymbols()">
                         </div>
                         <div class="form-field">
                             <label for="short_symbol">Short Symbol:</label>
-                            <input type="text" name="short_symbol" id="short_symbol" placeholder="e.g., MSTZ" onkeypress="if(event.key===&quot;Enter&quot;) updateSymbols()">
+                            <input type="text" name="short_symbol" id="short_symbol" 
+                                   value="{{ short_symbol if short_symbol else '' }}" 
+                                   placeholder="e.g., MSTZ"
+                                   onkeypress="if(event.key==='Enter') updateSymbols()">
                         </div>
                         <button type="button" onclick="updateSymbols()">Update Symbols</button>
                     </div>
@@ -285,16 +64,26 @@
         <div class="cash-section">
             <h2>Cash Balance</h2>
             <div class="cash-card">
-                <div class="cash-amount">$0.00</div>
+                <div class="cash-amount">${{ "%.2f"|format(cash_info.balance) }}</div>
                 <div class="cash-details">
-                    <div>Source: system</div>
-                    <div>Last updated: 0 minutes ago</div>
+                    <div>Source: {{ cash_info.source }}</div>
+                    <div>Last updated: 
+                        {% if cash_info.staleness.days > 0 %}
+                            {{ cash_info.staleness.days }} days
+                        {% endif %}
+                        {% if cash_info.staleness.hours > 0 %}
+                            {{ cash_info.staleness.hours }} hours
+                        {% endif %}
+                        {{ cash_info.staleness.minutes }} minutes ago
+                    </div>
                 </div>
                 
                 <form id="cash-form" class="update-form">
                     <h3>Update Cash Balance</h3>
                     <div class="form-group">
-                        <input type="number" id="cash_amount" step="0.01" required placeholder="Enter new balance" onkeypress="if(event.key===&quot;Enter&quot;) updateCash()">
+                        <input type="number" id="cash_amount" step="0.01" required 
+                               placeholder="Enter new balance"
+                               onkeypress="if(event.key==='Enter') updateCash()">
                         <button type="button" onclick="updateCash()">Update</button>
                     </div>
                 </form>
@@ -304,10 +93,22 @@
         <div class="cooldown-section">
             <h2>Cooldown Status</h2>
             <div class="cooldown-card">
-                <div class="cooldown-inactive">
-                    <div class="cooldown-label">Cooldown Inactive</div>
-                    <div>Ready to process signals normally</div>
-                </div>
+                {% if cooldown_info.active %}
+                    <div class="cooldown-active">
+                        <div class="cooldown-label">Cooldown Active</div>
+                        <div class="cooldown-timer">
+                            Time remaining: {{ cooldown_info.remaining.hours }}h {{ cooldown_info.remaining.minutes }}m
+                        </div>
+                        <div class="cooldown-end">
+                            Ends at: {{ cooldown_info.end_time }}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="cooldown-inactive">
+                        <div class="cooldown-label">Cooldown Inactive</div>
+                        <div>Ready to process signals normally</div>
+                    </div>
+                {% endif %}
                 
                 <div class="cooldown-controls">
                     <button type="button" class="cooldown-btn" onclick="startCooldown()">Start Cooldown</button>
@@ -319,128 +120,34 @@
         <div class="api-section">
             <h2>API Call History</h2>
             <div class="api-calls">
-                <div class="no-api-calls">No API calls recorded yet</div>
+                {% if api_calls %}
+                    {% for call in api_calls|reverse %}
+                        <div class="api-call">
+                            <div class="api-call-header">
+                                <div class="timestamp">{{ call.timestamp }}</div>
+                                <div class="status {{ call.response.status if call.response.status else 'unknown' }}">
+                                    {{ call.response.status if call.response.status else "Unknown" }}
+                                </div>
+                            </div>
+                            <div class="api-call-content">
+                                <div class="request">
+                                    <h4>Request</h4>
+                                    <pre>{{ call.request | tojson(indent=2) }}</pre>
+                                </div>
+                                <div class="response">
+                                    <h4>Response</h4>
+                                    <pre>{{ call.response | tojson(indent=2) }}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="no-api-calls">No API calls recorded yet</div>
+                {% endif %}
             </div>
         </div>
     </div>
 
-    <script>
-        function updateSymbols() {
-            var longSymbol = document.getElementById('long_symbol').value;
-            var shortSymbol = document.getElementById('short_symbol').value;
-            
-            var formData = new FormData();
-            formData.append('long_symbol', longSymbol);
-            formData.append('short_symbol', shortSymbol);
-            
-            fetch('/update-symbols', {
-                method: 'POST',
-                body: formData
-            })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(result) {
-                if (result.status === 'success') {
-                    // Update display values
-                    var symbolValues = document.querySelectorAll('.symbol-value');
-                    if (symbolValues[0]) symbolValues[0].textContent = result.symbols.long_symbol || 'Not set';
-                    if (symbolValues[1]) symbolValues[1].textContent = result.symbols.short_symbol || 'Not set';
-                    
-                    // Clear the input fields
-                    document.getElementById('long_symbol').value = '';
-                    document.getElementById('short_symbol').value = '';
-                }
-            })
-            .catch(function(error) {
-                alert('Error updating symbols: ' + error);
-            });
-        }
-        
-        function updateCash() {
-            var cashAmount = document.getElementById('cash_amount').value;
-            if (!cashAmount) {
-                alert('Please enter a cash amount');
-                return;
-            }
-            
-            var formData = new FormData();
-            formData.append('cash_amount', cashAmount);
-            
-            fetch('/update-cash', {
-                method: 'POST',
-                body: formData
-            })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(result) {
-                if (result.status === 'success') {
-                    // Update display value
-                    var cashDisplay = document.querySelector('.cash-amount');
-                    if (cashDisplay) cashDisplay.textContent = '
-    </script>
-</body>
-</html> + result.cash_balance.toFixed(2);
-                    
-                    // Clear the input field
-                    document.getElementById('cash_amount').value = '';
-                }
-            })
-            .catch(function(error) {
-                alert('Error updating cash: ' + error);
-            });
-        }
-        
-        function startCooldown() {
-            fetch('/start-cooldown', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(result) {
-                if (result.status === 'success' && result.cooldown.active) {
-                    // Update cooldown display
-                    var statusDiv = document.querySelector('.cooldown-card > div:first-child');
-                    if (statusDiv) {
-                        statusDiv.className = 'cooldown-active';
-                        statusDiv.innerHTML = '<div class="cooldown-label">Cooldown Active</div><div class="cooldown-timer">Time remaining: ' + result.cooldown.remaining.hours + 'h ' + result.cooldown.remaining.minutes + 'm</div>';
-                    }
-                }
-            })
-            .catch(function(error) {
-                alert('Error starting cooldown: ' + error);
-            });
-        }
-        
-        function stopCooldown() {
-            fetch('/stop-cooldown', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(result) {
-                if (result.status === 'success') {
-                    // Update cooldown display
-                    var statusDiv = document.querySelector('.cooldown-card > div:first-child');
-                    if (statusDiv) {
-                        statusDiv.className = 'cooldown-inactive';
-                        statusDiv.innerHTML = '<div class="cooldown-label">Cooldown Inactive</div><div>Ready to process signals normally</div>';
-                    }
-                }
-            })
-            .catch(function(error) {
-                alert('Error stopping cooldown: ' + error);
-            });
-        }
-    </script>
+    <script src="/static/dashboard.js"></script>
 </body>
 </html>
