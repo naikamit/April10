@@ -38,8 +38,12 @@ cooldown_manager = CooldownManager()
 async def lifespan(app):
     # Startup event
     logger.info("Starting Trading Webhook Service")
-    logger.info(f"Long Symbol: {LONG_SYMBOL}")
-    logger.info(f"Short Symbol: {SHORT_SYMBOL}")
+    
+    # Initialize symbols from config
+    state_manager.set_symbols(LONG_SYMBOL, SHORT_SYMBOL)
+    symbols = state_manager.get_symbols()
+    logger.info(f"Long Symbol: {symbols['long_symbol']}")
+    logger.info(f"Short Symbol: {symbols['short_symbol']}")
     
     yield
     
@@ -87,6 +91,7 @@ async def dashboard(request: Request):
     cash_info = state_manager.get_cash_balance_info()
     cooldown_info = cooldown_manager.get_cooldown_info()
     api_calls = state_manager.get_api_calls()
+    symbols = state_manager.get_symbols()
     
     return templates.TemplateResponse(
         "index.html", 
@@ -95,8 +100,8 @@ async def dashboard(request: Request):
             "cash_info": cash_info,
             "cooldown_info": cooldown_info,
             "api_calls": api_calls,
-            "long_symbol": LONG_SYMBOL,
-            "short_symbol": SHORT_SYMBOL,
+            "long_symbol": symbols["long_symbol"],
+            "short_symbol": symbols["short_symbol"],
             "is_processing": state_manager.is_currently_processing()
         }
     )
@@ -112,6 +117,19 @@ async def update_cash(cash_amount: float = Form(...)):
     else:
         raise HTTPException(status_code=400, detail="Invalid cash amount")
 
+@app.post("/update-symbols")
+async def update_symbols(long_symbol: str = Form(...), short_symbol: str = Form(...)):
+    """
+    Update trading symbols
+    """
+    try:
+        state_manager.set_symbols(long_symbol, short_symbol)
+        symbols = state_manager.get_symbols()
+        return {"status": "success", "symbols": symbols}
+    except Exception as e:
+        logger.exception(f"Error updating symbols: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/status")
 async def status():
     """
@@ -119,14 +137,15 @@ async def status():
     """
     cash_info = state_manager.get_cash_balance_info()
     cooldown_info = cooldown_manager.get_cooldown_info()
+    symbols = state_manager.get_symbols()
     
     return {
         "status": "ok",
         "cash_balance": cash_info,
         "cooldown": cooldown_info,
         "is_processing": state_manager.is_currently_processing(),
-        "long_symbol": LONG_SYMBOL,
-        "short_symbol": SHORT_SYMBOL
+        "long_symbol": symbols["long_symbol"],
+        "short_symbol": symbols["short_symbol"]
     }
 
 if __name__ == "__main__":
