@@ -36,7 +36,7 @@
                     </div>
                 </div>
                 
-                <form action="/update-symbols" method="post" class="update-form">
+                <form id="symbol-form" class="update-form">
                     <h3>Update Trading Symbols</h3>
                     <div class="symbols-form-group">
                         <div class="form-field">
@@ -51,7 +51,7 @@
                                    value="{{ short_symbol if short_symbol else '' }}" 
                                    placeholder="e.g., MSTZ">
                         </div>
-                        <button type="submit">Update Symbols</button>
+                        <button type="button" onclick="updateSymbols()">Update Symbols</button>
                     </div>
                 </form>
             </div>
@@ -74,11 +74,11 @@
                     </div>
                 </div>
                 
-                <form action="/update-cash" method="post" class="update-form">
+                <form id="cash-form" class="update-form">
                     <h3>Update Cash Balance</h3>
                     <div class="form-group">
-                        <input type="number" name="cash_amount" step="0.01" required placeholder="Enter new balance">
-                        <button type="submit">Update</button>
+                        <input type="number" id="cash_amount" step="0.01" required placeholder="Enter new balance">
+                        <button type="button" onclick="updateCash()">Update</button>
                     </div>
                 </form>
             </div>
@@ -105,8 +105,8 @@
                 {% endif %}
                 
                 <div class="cooldown-controls">
-                    <button id="start-cooldown-btn" type="button" class="cooldown-btn">Start Cooldown</button>
-                    <button id="stop-cooldown-btn" type="button" class="cooldown-btn">Stop Cooldown</button>
+                    <button type="button" class="cooldown-btn" onclick="startCooldown()">Start Cooldown</button>
+                    <button type="button" class="cooldown-btn" onclick="stopCooldown()">Stop Cooldown</button>
                 </div>
             </div>
         </div>
