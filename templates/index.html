@@ -19,6 +19,13 @@
                         {{ "Yes" if is_processing else "No" }}
                     </span>
                 </div>
+                <div class="status-item">
+                    <span class="label">JavaScript Status:</span>
+                    <span class="value" id="js-status">Not Working</span>
+                </div>
+                <div class="status-item">
+                    <button onclick="alert('JavaScript works!'); console.log('Test button clicked');" style="background: red; padding: 5px;">TEST BUTTON - Click Me</button>
+                </div>
             </div>
         </div>
         
