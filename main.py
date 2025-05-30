@@ -130,6 +130,37 @@ async def update_symbols(long_symbol: str = Form(...), short_symbol: str = Form(
         logger.exception(f"Error updating symbols: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/start-cooldown")
+async def start_cooldown():
+    """
+    Manually start cooldown period
+    """
+    try:
+        cooldown_manager.start_cooldown()
+        cooldown_info = cooldown_manager.get_cooldown_info()
+        return {"status": "success", "cooldown": cooldown_info}
+    except Exception as e:
+        logger.exception(f"Error starting cooldown: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/stop-cooldown") 
+async def stop_cooldown():
+    """
+    Manually stop cooldown period
+    """
+    try:
+        # Directly update state to stop cooldown
+        with state_manager._lock:
+            state_manager.in_cooldown = False
+            state_manager.cooldown_end_time = None
+            logger.info("Cooldown manually stopped")
+        
+        cooldown_info = cooldown_manager.get_cooldown_info()
+        return {"status": "success", "cooldown": cooldown_info}
+    except Exception as e:
+        logger.exception(f"Error stopping cooldown: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/status")
 async def status():
     """
