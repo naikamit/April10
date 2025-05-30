@@ -58,7 +58,7 @@
                                    value="{{ short_symbol if short_symbol else '' }}" 
                                    placeholder="e.g., MSTZ">
                         </div>
-                        <button type="button" onclick="updateSymbols()">Update Symbols</button>
+                        <button type="button" onclick="console.log('Update Symbols clicked'); updateSymbols();">Update Symbols</button>
                     </div>
                 </form>
             </div>
@@ -85,7 +85,7 @@
                     <h3>Update Cash Balance</h3>
                     <div class="form-group">
                         <input type="number" id="cash_amount" step="0.01" required placeholder="Enter new balance">
-                        <button type="button" onclick="updateCash()">Update</button>
+                        <button type="button" onclick="console.log('Update Cash clicked'); updateCash();">Update</button>
                     </div>
                 </form>
             </div>
@@ -112,8 +112,8 @@
                 {% endif %}
                 
                 <div class="cooldown-controls">
-                    <button type="button" class="cooldown-btn" onclick="startCooldown()">Start Cooldown</button>
-                    <button type="button" class="cooldown-btn" onclick="stopCooldown()">Stop Cooldown</button>
+                    <button type="button" class="cooldown-btn" onclick="console.log('Start Cooldown clicked'); startCooldown();">Start Cooldown</button>
+                    <button type="button" class="cooldown-btn" onclick="console.log('Stop Cooldown clicked'); stopCooldown();">Stop Cooldown</button>
                 </div>
             </div>
         </div>
