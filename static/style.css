@@ -230,16 +230,6 @@ button:disabled {
     margin-top: 10px;
 }
 
-.manual-warning {
-    background-color: #451a03;
-    border: 1px solid #f59e0b;
-    border-radius: 4px;
-    padding: 10px;
-    margin-bottom: 15px;
-    color: #fbbf24;
-    font-size: 0.9rem;
-}
-
 .manual-controls {
     display: flex;
     gap: 15px;
