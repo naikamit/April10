@@ -16,19 +16,46 @@
             <h2>System Status</h2>
             <div class="status-card">
                 <div class="status-item">
-                    <span class="label">Long Symbol:</span>
-                    <span class="value">{{ long_symbol if long_symbol else "Not set" }}</span>
-                </div>
-                <div class="status-item">
-                    <span class="label">Short Symbol:</span>
-                    <span class="value">{{ short_symbol if short_symbol else "Not set" }}</span>
-                </div>
-                <div class="status-item">
                     <span class="label">Processing Signal:</span>
                     <span class="value {% if is_processing %}active{% endif %}">
                         {{ "Yes" if is_processing else "No" }}
                     </span>
                 </div>
+            </div>
+        </div>
+        
+        <div class="symbols-section">
+            <h2>Trading Symbols</h2>
+            <div class="symbols-card">
+                <div class="symbol-display">
+                    <div class="symbol-item">
+                        <span class="label">Long Symbol:</span>
+                        <span class="symbol-value">{{ long_symbol if long_symbol else "Not set" }}</span>
+                    </div>
+                    <div class="symbol-item">
+                        <span class="label">Short Symbol:</span>
+                        <span class="symbol-value">{{ short_symbol if short_symbol else "Not set" }}</span>
+                    </div>
+                </div>
+                
+                <form action="/update-symbols" method="post" class="update-form">
+                    <h3>Update Trading Symbols</h3>
+                    <div class="symbols-form-group">
+                        <div class="form-field">
+                            <label for="long_symbol">Long Symbol:</label>
+                            <input type="text" name="long_symbol" id="long_symbol" 
+                                   value="{{ long_symbol if long_symbol else '' }}" 
+                                   placeholder="e.g., MSTU">
+                        </div>
+                        <div class="form-field">
+                            <label for="short_symbol">Short Symbol:</label>
+                            <input type="text" name="short_symbol" id="short_symbol" 
+                                   value="{{ short_symbol if short_symbol else '' }}" 
+                                   placeholder="e.g., MSTZ">
+                        </div>
+                        <button type="submit">Update Symbols</button>
+                    </div>
+                </form>
             </div>
         </div>
         
