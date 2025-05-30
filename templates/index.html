@@ -1,4 +1,3 @@
-<!-- templates/index.html - Dashboard template -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,15 +8,15 @@
     <meta http-equiv="refresh" content="60">
 </head>
 <body>
+    <div id="toast-container"></div>
+
     <div class="container">
         <div class="status-section">
             <h2>System Status</h2>
             <div class="status-card">
                 <div class="status-item">
                     <span class="label">Processing Signal:</span>
-                    <span class="value {% if is_processing %}active{% endif %}">
-                        {{ "Yes" if is_processing else "No" }}
-                    </span>
+                    <span class="value">No</span>
                 </div>
             </div>
         </div>
@@ -28,11 +27,11 @@
                 <div class="symbol-display">
                     <div class="symbol-item">
                         <span class="label">Long Symbol:</span>
-                        <span class="symbol-value">{{ long_symbol if long_symbol else "Not set" }}</span>
+                        <span class="symbol-value">Not set</span>
                     </div>
                     <div class="symbol-item">
                         <span class="label">Short Symbol:</span>
-                        <span class="symbol-value">{{ short_symbol if short_symbol else "Not set" }}</span>
+                        <span class="symbol-value">Not set</span>
                     </div>
                 </div>
                 
@@ -41,17 +40,13 @@
                     <div class="symbols-form-group">
                         <div class="form-field">
                             <label for="long_symbol">Long Symbol:</label>
-                            <input type="text" name="long_symbol" id="long_symbol" 
-                                   value="{{ long_symbol if long_symbol else '' }}" 
-                                   placeholder="e.g., MSTU">
+                            <input type="text" name="long_symbol" id="long_symbol" placeholder="e.g., MSTU">
                         </div>
                         <div class="form-field">
                             <label for="short_symbol">Short Symbol:</label>
-                            <input type="text" name="short_symbol" id="short_symbol" 
-                                   value="{{ short_symbol if short_symbol else '' }}" 
-                                   placeholder="e.g., MSTZ">
+                            <input type="text" name="short_symbol" id="short_symbol" placeholder="e.g., MSTZ">
                         </div>
-                        <button type="button" onclick="updateSymbolsSimple()">Update Symbols</button>
+                        <button type="button" onclick="updateSymbols()">Update Symbols</button>
                     </div>
                 </form>
             </div>
@@ -60,34 +55,17 @@
         <div class="cash-section">
             <h2>Cash Balance</h2>
             <div class="cash-card">
-                <div class="cash-amount">${{ "%.2f"|format(cash_info.balance) }}</div>
+                <div class="cash-amount">$0.00</div>
                 <div class="cash-details">
-                    <div>Source: {{ cash_info.source }}</div>
-                    <div>Last updated: 
-                        {% if cash_info.staleness.days > 0 %}
-                            {{ cash_info.staleness.days }} days
-                        {% endif %}
-                        {% if cash_info.staleness.hours > 0 %}
-                            {{ cash_info.staleness.hours }} hours
-                        {% endif %}
-                        {{ cash_info.staleness.minutes }} minutes ago
-                    </div>
+                    <div>Source: system</div>
+                    <div>Last updated: 0 minutes ago</div>
                 </div>
                 
                 <form id="cash-form" class="update-form">
                     <h3>Update Cash Balance</h3>
                     <div class="form-group">
                         <input type="number" id="cash_amount" step="0.01" required placeholder="Enter new balance">
-                        <button type="button" onclick="
-                            const cashAmount = document.getElementById('cash_amount').value;
-                            if (!cashAmount) { alert('Please enter a cash amount'); return; }
-                            const formData = new FormData();
-                            formData.append('cash_amount', cashAmount);
-                            fetch('/update-cash', {
-                                method: 'POST',
-                                body: formData
-                            }).then(r => r.json()).then(result => {
-                                alert('Cash updated: 
+                        <button type="button" onclick="updateCash()">Update</button>
                     </div>
                 </form>
             </div>
@@ -96,26 +74,14 @@
         <div class="cooldown-section">
             <h2>Cooldown Status</h2>
             <div class="cooldown-card">
-                {% if cooldown_info.active %}
-                    <div class="cooldown-active">
-                        <div class="cooldown-label">Cooldown Active</div>
-                        <div class="cooldown-timer">
-                            Time remaining: {{ cooldown_info.remaining.hours }}h {{ cooldown_info.remaining.minutes }}m
-                        </div>
-                        <div class="cooldown-end">
-                            Ends at: {{ cooldown_info.end_time }}
-                        </div>
-                    </div>
-                {% else %}
-                    <div class="cooldown-inactive">
-                        <div class="cooldown-label">Cooldown Inactive</div>
-                        <div>Ready to process signals normally</div>
-                    </div>
-                {% endif %}
+                <div class="cooldown-inactive">
+                    <div class="cooldown-label">Cooldown Inactive</div>
+                    <div>Ready to process signals normally</div>
+                </div>
                 
                 <div class="cooldown-controls">
-                    <button type="button" class="cooldown-btn" onclick="startCooldownSimple()">Start Cooldown</button>
-                    <button type="button" class="cooldown-btn" onclick="stopCooldownSimple()">Stop Cooldown</button>
+                    <button type="button" class="cooldown-btn" onclick="startCooldown()">Start Cooldown</button>
+                    <button type="button" class="cooldown-btn" onclick="stopCooldown()">Stop Cooldown</button>
                 </div>
             </div>
         </div>
@@ -123,520 +89,103 @@
         <div class="api-section">
             <h2>API Call History</h2>
             <div class="api-calls">
-                {% if api_calls %}
-                    {% for call in api_calls|reverse %}
-                        <div class="api-call">
-                            <div class="api-call-header">
-                                <div class="timestamp">{{ call.timestamp }}</div>
-                                <div class="status {{ call.response.status if call.response.status else 'unknown' }}">
-                                    {{ call.response.status if call.response.status else "Unknown" }}
-                                </div>
-                            </div>
-                            <div class="api-call-content">
-                                <div class="request">
-                                    <h4>Request</h4>
-                                    <pre>{{ call.request | tojson(indent=2) }}</pre>
-                                </div>
-                                <div class="response">
-                                    <h4>Response</h4>
-                                    <pre>{{ call.response | tojson(indent=2) }}</pre>
-                                </div>
-                            </div>
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="no-api-calls">No API calls recorded yet</div>
-                {% endif %}
+                <div class="no-api-calls">No API calls recorded yet</div>
             </div>
         </div>
     </div>
-    
-    <!-- Toast notification container -->
-    <div id="toast-container"></div>
 
     <script>
-        // Toast notification system
-        function showToast(message, type = 'success') {
-            console.log('Showing toast:', message, type);
-            const container = document.getElementById('toast-container');
-            if (!container) {
-                console.error('Toast container not found!');
+        function updateSymbols() {
+            alert('updateSymbols called!');
+            
+            var longSymbol = document.getElementById('long_symbol').value;
+            var shortSymbol = document.getElementById('short_symbol').value;
+            
+            var formData = new FormData();
+            formData.append('long_symbol', longSymbol);
+            formData.append('short_symbol', shortSymbol);
+            
+            fetch('/update-symbols', {
+                method: 'POST',
+                body: formData
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(result) {
+                alert('Symbols updated: ' + JSON.stringify(result));
+            })
+            .catch(function(error) {
+                alert('Error: ' + error);
+            });
+        }
+        
+        function updateCash() {
+            alert('updateCash called!');
+            
+            var cashAmount = document.getElementById('cash_amount').value;
+            if (!cashAmount) {
+                alert('Please enter a cash amount');
                 return;
             }
             
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.textContent = message;
+            var formData = new FormData();
+            formData.append('cash_amount', cashAmount);
             
-            container.appendChild(toast);
-            
-            // Trigger animation
-            setTimeout(() => toast.classList.add('show'), 100);
-            
-            // Remove after 3 seconds
-            setTimeout(() => {
-                toast.classList.remove('show');
-                setTimeout(() => {
-                    if (container.contains(toast)) {
-                        container.removeChild(toast);
-                    }
-                }, 300);
-            }, 3000);
+            fetch('/update-cash', {
+                method: 'POST',
+                body: formData
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(result) {
+                alert('Cash updated: ' + JSON.stringify(result));
+            })
+            .catch(function(error) {
+                alert('Error: ' + error);
+            });
         }
-
-        // Test function to verify buttons work
-        function testToast() {
-            showToast('Button test successful!', 'info');
-        }
-
-        // Wait for DOM to load
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, setting up event listeners');
-            
-            // Test toast on page load
-            setTimeout(() => showToast('Dashboard loaded successfully', 'success'), 500);
-
-        // Handle symbol form submission
-        document.querySelector('form[action="/update-symbols"]').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const longSymbol = formData.get('long_symbol');
-            const shortSymbol = formData.get('short_symbol');
-            
-            showToast('Updating symbols...', 'info');
-            
-            try {
-                const response = await fetch('/update-symbols', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (response.ok) {
-                    const result = await response.json();
-                    showToast(`Symbols updated: Long=${result.symbols.long_symbol || 'None'}, Short=${result.symbols.short_symbol || 'None'}`, 'success');
-                    
-                    // Update displayed values
-                    document.querySelector('.symbol-item:first-child .symbol-value').textContent = 
-                        result.symbols.long_symbol || 'Not set';
-                    document.querySelector('.symbol-item:last-child .symbol-value').textContent = 
-                        result.symbols.short_symbol || 'Not set';
-                } else {
-                    const error = await response.json();
-                    showToast(`Error: ${error.detail}`, 'error');
-                }
-            } catch (error) {
-                showToast('Network error occurred', 'error');
-            }
-        });
-
-        // Handle cash form submission
-        document.querySelector('form[action="/update-cash"]').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const cashAmount = formData.get('cash_amount');
-            
-            showToast('Updating cash balance...', 'info');
-            
-            try {
-                const response = await fetch('/update-cash', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (response.ok) {
-                    const result = await response.json();
-                    showToast(`Cash balance updated to ${result.cash_balance.toFixed(2)}`, 'success');
-                    
-                    // Update displayed value
-                    document.querySelector('.cash-amount').textContent = `${result.cash_balance.toFixed(2)}`;
-                    
-                    // Reset form
-                    this.reset();
-                } else {
-                    const error = await response.json();
-                    showToast(`Error: ${error.detail}`, 'error');
-                }
-            } catch (error) {
-                showToast('Network error occurred', 'error');
-            }
-        });
-
-        // Automatically refresh the page every minute
-        setTimeout(function() {
-            window.location.reload();
-        }, 60000);
-    </script>
-</body>
-</html> + result.cash_balance.toFixed(2));
-                                if (result.status === 'success') {
-                                    document.querySelector('.cash-amount').textContent = '
-                    </div>
-                </form>
-            </div>
-        </div>
         
-        <div class="cooldown-section">
-            <h2>Cooldown Status</h2>
-            <div class="cooldown-card">
-                {% if cooldown_info.active %}
-                    <div class="cooldown-active">
-                        <div class="cooldown-label">Cooldown Active</div>
-                        <div class="cooldown-timer">
-                            Time remaining: {{ cooldown_info.remaining.hours }}h {{ cooldown_info.remaining.minutes }}m
-                        </div>
-                        <div class="cooldown-end">
-                            Ends at: {{ cooldown_info.end_time }}
-                        </div>
-                    </div>
-                {% else %}
-                    <div class="cooldown-inactive">
-                        <div class="cooldown-label">Cooldown Inactive</div>
-                        <div>Ready to process signals normally</div>
-                    </div>
-                {% endif %}
-                
-                <div class="cooldown-controls">
-                    <button type="button" class="cooldown-btn" onclick="console.log('Start Cooldown clicked'); startCooldown();">Start Cooldown</button>
-                    <button type="button" class="cooldown-btn" onclick="console.log('Stop Cooldown clicked'); stopCooldown();">Stop Cooldown</button>
-                </div>
-            </div>
-        </div>
+        function startCooldown() {
+            alert('startCooldown called!');
+            
+            fetch('/start-cooldown', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(result) {
+                alert('Cooldown started: ' + JSON.stringify(result));
+            })
+            .catch(function(error) {
+                alert('Error: ' + error);
+            });
+        }
         
-        <div class="api-section">
-            <h2>API Call History</h2>
-            <div class="api-calls">
-                {% if api_calls %}
-                    {% for call in api_calls|reverse %}
-                        <div class="api-call">
-                            <div class="api-call-header">
-                                <div class="timestamp">{{ call.timestamp }}</div>
-                                <div class="status {{ call.response.status if call.response.status else 'unknown' }}">
-                                    {{ call.response.status if call.response.status else "Unknown" }}
-                                </div>
-                            </div>
-                            <div class="api-call-content">
-                                <div class="request">
-                                    <h4>Request</h4>
-                                    <pre>{{ call.request | tojson(indent=2) }}</pre>
-                                </div>
-                                <div class="response">
-                                    <h4>Response</h4>
-                                    <pre>{{ call.response | tojson(indent=2) }}</pre>
-                                </div>
-                            </div>
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="no-api-calls">No API calls recorded yet</div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    
-    <!-- Toast notification container -->
-    <div id="toast-container"></div>
-
-    <script>
-        // Toast notification system
-        function showToast(message, type = 'success') {
-            console.log('Showing toast:', message, type);
-            const container = document.getElementById('toast-container');
-            if (!container) {
-                console.error('Toast container not found!');
-                return;
-            }
+        function stopCooldown() {
+            alert('stopCooldown called!');
             
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.textContent = message;
-            
-            container.appendChild(toast);
-            
-            // Trigger animation
-            setTimeout(() => toast.classList.add('show'), 100);
-            
-            // Remove after 3 seconds
-            setTimeout(() => {
-                toast.classList.remove('show');
-                setTimeout(() => {
-                    if (container.contains(toast)) {
-                        container.removeChild(toast);
-                    }
-                }, 300);
-            }, 3000);
-        }
-
-        // Test function to verify buttons work
-        function testToast() {
-            showToast('Button test successful!', 'info');
-        }
-
-        // Wait for DOM to load
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, setting up event listeners');
-            
-            // Test toast on page load
-            setTimeout(() => showToast('Dashboard loaded successfully', 'success'), 500);
-
-        // Handle symbol form submission
-        document.querySelector('form[action="/update-symbols"]').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const longSymbol = formData.get('long_symbol');
-            const shortSymbol = formData.get('short_symbol');
-            
-            showToast('Updating symbols...', 'info');
-            
-            try {
-                const response = await fetch('/update-symbols', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (response.ok) {
-                    const result = await response.json();
-                    showToast(`Symbols updated: Long=${result.symbols.long_symbol || 'None'}, Short=${result.symbols.short_symbol || 'None'}`, 'success');
-                    
-                    // Update displayed values
-                    document.querySelector('.symbol-item:first-child .symbol-value').textContent = 
-                        result.symbols.long_symbol || 'Not set';
-                    document.querySelector('.symbol-item:last-child .symbol-value').textContent = 
-                        result.symbols.short_symbol || 'Not set';
-                } else {
-                    const error = await response.json();
-                    showToast(`Error: ${error.detail}`, 'error');
+            fetch('/stop-cooldown', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
                 }
-            } catch (error) {
-                showToast('Network error occurred', 'error');
-            }
-        });
-
-        // Handle cash form submission
-        document.querySelector('form[action="/update-cash"]').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const cashAmount = formData.get('cash_amount');
-            
-            showToast('Updating cash balance...', 'info');
-            
-            try {
-                const response = await fetch('/update-cash', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (response.ok) {
-                    const result = await response.json();
-                    showToast(`Cash balance updated to ${result.cash_balance.toFixed(2)}`, 'success');
-                    
-                    // Update displayed value
-                    document.querySelector('.cash-amount').textContent = `${result.cash_balance.toFixed(2)}`;
-                    
-                    // Reset form
-                    this.reset();
-                } else {
-                    const error = await response.json();
-                    showToast(`Error: ${error.detail}`, 'error');
-                }
-            } catch (error) {
-                showToast('Network error occurred', 'error');
-            }
-        });
-
-        // Automatically refresh the page every minute
-        setTimeout(function() {
-            window.location.reload();
-        }, 60000);
-    </script>
-</body>
-</html> + result.cash_balance.toFixed(2);
-                                    document.getElementById('cash_amount').value = '';
-                                }
-                            }).catch(e => alert('Error: ' + e));
-                        ">Update</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-        
-        <div class="cooldown-section">
-            <h2>Cooldown Status</h2>
-            <div class="cooldown-card">
-                {% if cooldown_info.active %}
-                    <div class="cooldown-active">
-                        <div class="cooldown-label">Cooldown Active</div>
-                        <div class="cooldown-timer">
-                            Time remaining: {{ cooldown_info.remaining.hours }}h {{ cooldown_info.remaining.minutes }}m
-                        </div>
-                        <div class="cooldown-end">
-                            Ends at: {{ cooldown_info.end_time }}
-                        </div>
-                    </div>
-                {% else %}
-                    <div class="cooldown-inactive">
-                        <div class="cooldown-label">Cooldown Inactive</div>
-                        <div>Ready to process signals normally</div>
-                    </div>
-                {% endif %}
-                
-                <div class="cooldown-controls">
-                    <button type="button" class="cooldown-btn" onclick="console.log('Start Cooldown clicked'); startCooldown();">Start Cooldown</button>
-                    <button type="button" class="cooldown-btn" onclick="console.log('Stop Cooldown clicked'); stopCooldown();">Stop Cooldown</button>
-                </div>
-            </div>
-        </div>
-        
-        <div class="api-section">
-            <h2>API Call History</h2>
-            <div class="api-calls">
-                {% if api_calls %}
-                    {% for call in api_calls|reverse %}
-                        <div class="api-call">
-                            <div class="api-call-header">
-                                <div class="timestamp">{{ call.timestamp }}</div>
-                                <div class="status {{ call.response.status if call.response.status else 'unknown' }}">
-                                    {{ call.response.status if call.response.status else "Unknown" }}
-                                </div>
-                            </div>
-                            <div class="api-call-content">
-                                <div class="request">
-                                    <h4>Request</h4>
-                                    <pre>{{ call.request | tojson(indent=2) }}</pre>
-                                </div>
-                                <div class="response">
-                                    <h4>Response</h4>
-                                    <pre>{{ call.response | tojson(indent=2) }}</pre>
-                                </div>
-                            </div>
-                        </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="no-api-calls">No API calls recorded yet</div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    
-    <!-- Toast notification container -->
-    <div id="toast-container"></div>
-
-    <script>
-        // Toast notification system
-        function showToast(message, type = 'success') {
-            console.log('Showing toast:', message, type);
-            const container = document.getElementById('toast-container');
-            if (!container) {
-                console.error('Toast container not found!');
-                return;
-            }
-            
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.textContent = message;
-            
-            container.appendChild(toast);
-            
-            // Trigger animation
-            setTimeout(() => toast.classList.add('show'), 100);
-            
-            // Remove after 3 seconds
-            setTimeout(() => {
-                toast.classList.remove('show');
-                setTimeout(() => {
-                    if (container.contains(toast)) {
-                        container.removeChild(toast);
-                    }
-                }, 300);
-            }, 3000);
+            })
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(result) {
+                alert('Cooldown stopped: ' + JSON.stringify(result));
+            })
+            .catch(function(error) {
+                alert('Error: ' + error);
+            });
         }
-
-        // Test function to verify buttons work
-        function testToast() {
-            showToast('Button test successful!', 'info');
-        }
-
-        // Wait for DOM to load
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, setting up event listeners');
-            
-            // Test toast on page load
-            setTimeout(() => showToast('Dashboard loaded successfully', 'success'), 500);
-
-        // Handle symbol form submission
-        document.querySelector('form[action="/update-symbols"]').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const longSymbol = formData.get('long_symbol');
-            const shortSymbol = formData.get('short_symbol');
-            
-            showToast('Updating symbols...', 'info');
-            
-            try {
-                const response = await fetch('/update-symbols', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (response.ok) {
-                    const result = await response.json();
-                    showToast(`Symbols updated: Long=${result.symbols.long_symbol || 'None'}, Short=${result.symbols.short_symbol || 'None'}`, 'success');
-                    
-                    // Update displayed values
-                    document.querySelector('.symbol-item:first-child .symbol-value').textContent = 
-                        result.symbols.long_symbol || 'Not set';
-                    document.querySelector('.symbol-item:last-child .symbol-value').textContent = 
-                        result.symbols.short_symbol || 'Not set';
-                } else {
-                    const error = await response.json();
-                    showToast(`Error: ${error.detail}`, 'error');
-                }
-            } catch (error) {
-                showToast('Network error occurred', 'error');
-            }
-        });
-
-        // Handle cash form submission
-        document.querySelector('form[action="/update-cash"]').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const cashAmount = formData.get('cash_amount');
-            
-            showToast('Updating cash balance...', 'info');
-            
-            try {
-                const response = await fetch('/update-cash', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (response.ok) {
-                    const result = await response.json();
-                    showToast(`Cash balance updated to ${result.cash_balance.toFixed(2)}`, 'success');
-                    
-                    // Update displayed value
-                    document.querySelector('.cash-amount').textContent = `${result.cash_balance.toFixed(2)}`;
-                    
-                    // Reset form
-                    this.reset();
-                } else {
-                    const error = await response.json();
-                    showToast(`Error: ${error.detail}`, 'error');
-                }
-            } catch (error) {
-                showToast('Network error occurred', 'error');
-            }
-        });
-
-        // Automatically refresh the page every minute
-        setTimeout(function() {
-            window.location.reload();
-        }, 60000);
     </script>
 </body>
 </html>
