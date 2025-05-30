@@ -148,7 +148,13 @@
     <script>
         // Toast notification system
         function showToast(message, type = 'success') {
+            console.log('Showing toast:', message, type);
             const container = document.getElementById('toast-container');
+            if (!container) {
+                console.error('Toast container not found!');
+                return;
+            }
+            
             const toast = document.createElement('div');
             toast.className = `toast toast-${type}`;
             toast.textContent = message;
@@ -161,9 +167,25 @@
             // Remove after 3 seconds
             setTimeout(() => {
                 toast.classList.remove('show');
-                setTimeout(() => container.removeChild(toast), 300);
+                setTimeout(() => {
+                    if (container.contains(toast)) {
+                        container.removeChild(toast);
+                    }
+                }, 300);
             }, 3000);
         }
+
+        // Test function to verify buttons work
+        function testToast() {
+            showToast('Button test successful!', 'info');
+        }
+
+        // Wait for DOM to load
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, setting up event listeners');
+            
+            // Test toast on page load
+            setTimeout(() => showToast('Dashboard loaded successfully', 'success'), 500);
 
         // Handle symbol form submission
         document.querySelector('form[action="/update-symbols"]').addEventListener('submit', async function(e) {
