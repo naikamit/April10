@@ -83,6 +83,11 @@ document.getElementById('create-strategy-form').addEventListener('submit', funct
     if (shortSymbol) formData.append('short_symbol', shortSymbol);
     formData.append('cash_balance', cash);
     
+    // Disable form during submission
+    const submitButton = e.target.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    submitButton.textContent = 'Creating...';
+    
     fetch('/strategies', {
         method: 'POST',
         body: formData
@@ -100,6 +105,10 @@ document.getElementById('create-strategy-form').addEventListener('submit', funct
     })
     .catch(error => {
         showToast(`Error creating strategy: ${error.message}`, 'error');
+    })
+    .finally(() => {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Create Strategy';
     });
 });
 
