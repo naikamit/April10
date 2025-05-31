@@ -1,4 +1,33 @@
-<!-- templates/index.html - Multi-Strategy Dashboard template -->
+<!-- API Call History Section -->
+            <div class="api-section">
+                <h2>API Call History</h2>
+                <div class="api-calls">
+                    {% if strategy.get('api_calls') and strategy.api_calls|length > 0 %}
+                        {% for call in strategy.api_calls|reverse %}
+                            <div class="api-call">
+                                <div class="api-call-header">
+                                    <div class="timestamp">{{ call.timestamp }}</div>
+                                    <div class="status {{ call.response.status if call.response.status else 'unknown' }}">
+                                        {{ call.response.status if call.response.status else "Unknown" }}
+                                    </div>
+                                </div>
+                                <div class="api-call-content">
+                                    <div class="request">
+                                        <h4>Request</h4>
+                                        <pre>{{ call.request | tojson(indent=2) }}</pre>
+                                    </div>
+                                    <div class="response">
+                                        <h4>Response</h4>
+                                        <pre>{{ call.response | tojson(indent=2) }}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-api-calls">No API calls recorded yet for this strategy</div>
+                    {% endif %}
+                </div>
+            </div><!-- templates/index.html - Multi-Strategy Dashboard template -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -19,7 +48,7 @@
             <div class="tabs-header">
                 {% for strategy in strategies %}
                 <div class="tab-button" data-strategy="{{ strategy.name }}" onclick="switchToStrategy('{{ strategy.name }}')">
-                    <span class="tab-name">{{ strategy.display_name if strategy.display_name else strategy.name }}</span>
+                    <span class="tab-name">{{ strategy.get('display_name', strategy.name) }}</span>
                 </div>
                 {% endfor %}
                 <div class="tab-button tab-create" onclick="showCreateStrategy()">
@@ -162,16 +191,20 @@
                 <div class="cash-card">
                     <div class="cash-amount">${{ "%.2f"|format(strategy.cash_balance) }}</div>
                     <div class="cash-details">
-                        <div>Strategy: {{ strategy.display_name }}</div>
+                        <div>Strategy: {{ strategy.get('display_name', strategy.name) }}</div>
                         <div>Last updated: 
-                            {% set staleness = strategy.cash_info.staleness %}
-                            {% if staleness.days > 0 %}
-                                {{ staleness.days }} days
+                            {% if strategy.cash_info and strategy.cash_info.staleness %}
+                                {% set staleness = strategy.cash_info.staleness %}
+                                {% if staleness.days > 0 %}
+                                    {{ staleness.days }} days
+                                {% endif %}
+                                {% if staleness.hours > 0 %}
+                                    {{ staleness.hours }} hours
+                                {% endif %}
+                                {{ staleness.minutes }} minutes ago
+                            {% else %}
+                                Just now
                             {% endif %}
-                            {% if staleness.hours > 0 %}
-                                {{ staleness.hours }} hours
-                            {% endif %}
-                            {{ staleness.minutes }} minutes ago
                         </div>
                     </div>
                     
