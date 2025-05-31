@@ -1,7 +1,6 @@
 # main.py - Entry point, FastAPI setup
 import logging
 import os
-import json
 from datetime import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form, BackgroundTasks, HTTPException
@@ -57,28 +56,24 @@ app = FastAPI(title="Trading Webhook Service", lifespan=lifespan)
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.post("/webhook")
-async def webhook(request: Request, background_tasks: BackgroundTasks):
+@app.post("/webhook/{signal}")
+async def webhook(signal: str, background_tasks: BackgroundTasks):
     """
-    Webhook endpoint to receive signals
+    Webhook endpoint to receive signals via URL path
     """
     try:
-        payload = await request.json()
-        logger.info(f"Received webhook: {payload}")
+        logger.info(f"Received webhook signal: {signal}")
         
-        signal = payload.get("signal")
-        if not signal:
-            raise HTTPException(status_code=400, detail="Missing 'signal' field")
-            
+        # Validate signal type
         if signal not in ["long", "short"]:
-            raise HTTPException(status_code=400, detail=f"Invalid signal: {signal}")
+            raise HTTPException(status_code=400, detail=f"Invalid signal: {signal}. Must be 'long' or 'short'")
         
         # Process signal in background to avoid webhook timeout
         background_tasks.add_task(signal_processor.process_signal, signal)
         
         return {"status": "processing", "signal": signal}
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Error processing webhook: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
