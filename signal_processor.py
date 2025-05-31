@@ -141,7 +141,7 @@ class SignalProcessor:
         """
         Buy a symbol with retry logic for a strategy:
         1. Buy 1 share to get current price
-        2. Calculate max shares
+        2. Calculate max shares based on remaining cash
         3. Buy max shares with retry logic
         """
         logger.info(f"🔥 BUYING SHARES: strategy={strategy.name} symbol={symbol} attempting_purchase")
@@ -153,15 +153,18 @@ class SignalProcessor:
             logger.error(f"🔥 ERROR: strategy={strategy.name} symbol={symbol} failed_to_get_price")
             return
         
-        # 2. Calculate max shares based on current cash balance and price
+        # Update cash balance after the 1-share purchase
+        self.cash_manager.update_balance_from_buy(price, 1, strategy)
+        
+        # 2. Calculate max shares based on remaining cash balance and price
         max_shares = self.cash_manager.get_max_shares(price, strategy)
         
         if max_shares <= 0:
-            logger.info(f"🔥 ERROR: strategy={strategy.name} insufficient_cash={strategy.cash_balance} required={price} buy_failed")
+            logger.info(f"🔥 BUYING COMPLETE: strategy={strategy.name} symbol={symbol} bought_1_share only_enough_cash_for_1")
             return
         
-        # 3. Try to buy max shares with retry logic
-        logger.info(f"🔥 BUYING SHARES: strategy={strategy.name} symbol={symbol} max_shares={max_shares} attempting_purchase")
+        # 3. Try to buy additional shares with retry logic
+        logger.info(f"🔥 BUYING SHARES: strategy={strategy.name} symbol={symbol} max_additional_shares={max_shares} attempting_purchase")
         
         retries = 0
         shares_to_buy = max_shares
@@ -174,6 +177,7 @@ class SignalProcessor:
                 # Reduce cash balance by the amount spent
                 if final_price:
                     self.cash_manager.update_balance_from_buy(final_price, shares_to_buy, strategy)
+                logger.info(f"🔥 BUYING COMPLETE: strategy={strategy.name} symbol={symbol} total_shares={1 + shares_to_buy}")
                 return
             
             # Calculate reduced shares for retry (ensure at least 1 fewer share)
@@ -184,7 +188,8 @@ class SignalProcessor:
             retries += 1
             await asyncio.sleep(3)  # Pause before retry
         
-        logger.error(f"🔥 ERROR: strategy={strategy.name} symbol={symbol} max_buy_retries_exceeded={MAX_BUY_RETRIES}")
+        logger.error(f"🔥 ERROR: strategy={strategy.name} symbol={symbol} max_buy_retries_exceeded={MAX_BUY_RETRIES} bought_1_share_only")
+        logger.info(f"🔥 BUYING COMPLETE: strategy={strategy.name} symbol={symbol} total_shares=1 additional_buys_failed")
 
     async def _close_symbol_position(self, symbol: str, strategy: Strategy):
         """
