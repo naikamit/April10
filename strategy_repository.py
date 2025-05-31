@@ -54,7 +54,7 @@ class StrategyRepository:
             strategy = Strategy(name, long_symbol, short_symbol, cash_balance)
             self.strategies[normalized_name] = strategy
             
-            logger.info(f"🔥 STRATEGY CREATED: name={strategy.name} display_name={strategy.display_name} "
+            logger.info(f"🔥 STRATEGY CREATED: name={strategy.name} display_name={getattr(strategy, 'display_name', strategy.name)} "
                        f"long={strategy.long_symbol} short={strategy.short_symbol} cash={strategy.cash_balance}")
             
             return strategy
@@ -72,7 +72,11 @@ class StrategyRepository:
         normalized_name = name.lower()
         
         with self._storage_lock:
-            return self.strategies.get(normalized_name)
+            strategy = self.strategies.get(normalized_name)
+            if strategy and not hasattr(strategy, 'display_name'):
+                strategy.display_name = strategy.name
+                logger.info(f"🔥 STRATEGY MIGRATION: added display_name to {strategy.name}")
+            return strategy
     
     def get_all_strategies(self) -> List[Strategy]:
         """
