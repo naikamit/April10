@@ -19,10 +19,12 @@
             <div class="tabs-header">
                 {% for strategy in strategies %}
                 <div class="tab-button" data-strategy="{{ strategy.name }}" onclick="switchToStrategy('{{ strategy.name }}')">
-                    {{ strategy.display_name }}
+                    <span class="tab-name">{{ strategy.display_name if strategy.display_name else strategy.name }}</span>
                 </div>
                 {% endfor %}
-                <div class="tab-button tab-create" onclick="showCreateStrategy()">+</div>
+                <div class="tab-button tab-create" onclick="showCreateStrategy()">
+                    <span class="tab-name">+</span>
+                </div>
             </div>
         </div>
 
@@ -162,14 +164,14 @@
                     <div class="cash-details">
                         <div>Strategy: {{ strategy.display_name }}</div>
                         <div>Last updated: 
-                            {% set staleness = strategy.get('staleness', {}) %}
-                            {% if staleness.get('days', 0) > 0 %}
+                            {% set staleness = strategy.cash_info.staleness %}
+                            {% if staleness.days > 0 %}
                                 {{ staleness.days }} days
                             {% endif %}
-                            {% if staleness.get('hours', 0) > 0 %}
+                            {% if staleness.hours > 0 %}
                                 {{ staleness.hours }} hours
                             {% endif %}
-                            {{ staleness.get('minutes', 0) }} minutes ago
+                            {{ staleness.minutes }} minutes ago
                         </div>
                     </div>
                     
@@ -216,7 +218,7 @@
             <div class="api-section">
                 <h2>API Call History</h2>
                 <div class="api-calls">
-                    {% if strategy.api_calls %}
+                    {% if strategy.api_calls and strategy.api_calls|length > 0 %}
                         {% for call in strategy.api_calls|reverse %}
                             <div class="api-call">
                                 <div class="api-call-header">
