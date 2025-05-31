@@ -1,10 +1,10 @@
-# signal_processor.py - Signal processing logic
+# signal_processor.py - Signal processing logic (strategy-aware)
 import logging
 import asyncio
 from typing import Dict, Any, Optional
 
 from config import BUY_RETRY_REDUCTION_PERCENT, MAX_BUY_RETRIES
-from state_manager import StateManager
+from strategy import Strategy
 from api_client import SignalStackClient
 from cash_manager import CashManager
 from cooldown_manager import CooldownManager
@@ -13,203 +13,224 @@ logger = logging.getLogger(__name__)
 
 class SignalProcessor:
     def __init__(self):
-        self.state_manager = StateManager()
         self.api_client = SignalStackClient()
         self.cash_manager = CashManager()
         self.cooldown_manager = CooldownManager()
 
-    async def process_signal(self, signal_type: str):
+    async def process_signal(self, signal_type: str, strategy: Strategy) -> Dict[str, Any]:
         """
-        Process a signal (long or short)
+        Process a signal for a specific strategy
+        
+        Args:
+            signal_type: Type of signal ('long', 'short', 'close')
+            strategy: Strategy instance to process signal for
+            
+        Returns:
+            Dictionary with processing result
         """
-        logger.info(f"Processing {signal_type} signal")
+        logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} signal={signal_type} starting_execution")
         
-        # Check if we're already processing a signal
-        if self.state_manager.is_currently_processing():
-            logger.warning("Already processing a signal, ignoring this one")
-            return {"status": "ignored", "reason": "Already processing a signal"}
+        # Check if strategy is already processing a signal
+        if strategy.is_processing:
+            logger.warning(f"🔥 SIGNAL IGNORED: strategy={strategy.name} signal={signal_type} reason=already_processing")
+            return {"status": "ignored", "reason": "Strategy is already processing a signal"}
         
-        # Set processing flag
-        self.state_manager.set_processing(True)
+        # Set processing flag for this strategy
+        strategy.is_processing = True
         
         try:
             # Check cooldown state
-            in_cooldown = self.cooldown_manager.is_in_cooldown()
-            logger.info(f"Cooldown state: {in_cooldown}")
+            in_cooldown = self.cooldown_manager.is_in_cooldown(strategy)
+            logger.info(f"🔥 COOLDOWN CHECK: strategy={strategy.name} status={'active' if in_cooldown else 'inactive'} ready_to_process={not in_cooldown}")
             
             if not in_cooldown:
                 # Start the cooldown period
-                self.cooldown_manager.start_cooldown()
+                self.cooldown_manager.start_cooldown(strategy)
                 
                 # Process normal signal (not in cooldown)
                 if signal_type == "long":
-                    await self._process_long_signal()
+                    await self._process_long_signal(strategy)
                 elif signal_type == "short":
-                    await self._process_short_signal()
+                    await self._process_short_signal(strategy)
                 elif signal_type == "close":
-                    await self._close_all_positions()
+                    await self._close_all_positions(strategy)
                 else:
-                    logger.error(f"Unknown signal type: {signal_type}")
-                    self.state_manager.set_processing(False)
+                    logger.error(f"🔥 ERROR: strategy={strategy.name} unknown_signal_type={signal_type}")
+                    strategy.is_processing = False
                     return {"status": "error", "reason": f"Unknown signal type: {signal_type}"}
             else:
                 # In cooldown period, do nothing
-                logger.info("In cooldown period, ignoring signal")
+                logger.info(f"🔥 SIGNAL IGNORED: strategy={strategy.name} signal={signal_type} reason=in_cooldown")
                 
-            self.state_manager.set_processing(False)
+            strategy.is_processing = False
+            logger.info(f"🔥 SIGNAL COMPLETE: strategy={strategy.name} signal={signal_type} result=success")
             return {"status": "success"}
             
         except Exception as e:
-            logger.exception(f"Error processing signal: {str(e)}")
-            self.state_manager.set_processing(False)
+            logger.exception(f"🔥 ERROR: strategy={strategy.name} signal_processing_error={str(e)}")
+            strategy.is_processing = False
             return {"status": "error", "reason": str(e)}
 
-    async def _process_long_signal(self):
+    async def _process_long_signal(self, strategy: Strategy):
         """
-        Process a long signal:
+        Process a long signal for a strategy:
         1. Close short positions
         2. Buy long symbol (if not null)
         """
-        logger.info("Processing long signal")
-        
-        # Get current symbols
-        symbols = self.state_manager.get_symbols()
-        long_symbol = symbols["long_symbol"]
-        short_symbol = symbols["short_symbol"]
+        logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} signal=long starting_execution")
         
         # 1. Close short positions
-        if short_symbol:
-            await self._close_symbol_position(short_symbol)
+        if strategy.short_symbol:
+            await self._close_symbol_position(strategy.short_symbol, strategy)
         else:
-            logger.info("Short symbol is null, skipping close")
+            logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} short_symbol=null skipping_close")
         
         # 2. Buy long symbol if not null
-        if long_symbol:
-            await self._buy_symbol(long_symbol)
+        if strategy.long_symbol:
+            await self._buy_symbol(strategy.long_symbol, strategy)
             # Pause for 3 seconds as specified in requirements
             await asyncio.sleep(3)
         else:
-            logger.info("Long symbol is null, skipping buy")
+            logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} long_symbol=null skipping_buy")
 
-    async def _process_short_signal(self):
+    async def _process_short_signal(self, strategy: Strategy):
         """
-        Process a short signal:
+        Process a short signal for a strategy:
         1. Close long positions
         2. Buy short symbol (if not null)
         """
-        logger.info("Processing short signal")
-        
-        # Get current symbols
-        symbols = self.state_manager.get_symbols()
-        long_symbol = symbols["long_symbol"]
-        short_symbol = symbols["short_symbol"]
+        logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} signal=short starting_execution")
         
         # 1. Close long positions
-        if long_symbol:
-            await self._close_symbol_position(long_symbol)
+        if strategy.long_symbol:
+            await self._close_symbol_position(strategy.long_symbol, strategy)
         else:
-            logger.info("Long symbol is null, skipping close")
+            logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} long_symbol=null skipping_close")
         
         # 2. Buy short symbol if not null
-        if short_symbol:
-            await self._buy_symbol(short_symbol)
+        if strategy.short_symbol:
+            await self._buy_symbol(strategy.short_symbol, strategy)
             # Pause for 3 seconds as specified in requirements
             await asyncio.sleep(3)
         else:
-            logger.info("Short symbol is null, skipping buy")
+            logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} short_symbol=null skipping_buy")
 
-    async def _close_all_positions(self):
+    async def _close_all_positions(self, strategy: Strategy):
         """
-        Close all positions for both symbols
+        Close all positions for both symbols in a strategy
         """
-        logger.info("Closing all positions")
-        
-        # Get current symbols
-        symbols = self.state_manager.get_symbols()
-        long_symbol = symbols["long_symbol"]
-        short_symbol = symbols["short_symbol"]
+        logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} signal=close closing_all_positions")
         
         close_tasks = []
         
         # Close long positions if symbol is not null
-        if long_symbol:
-            close_tasks.append(self._close_symbol_position(long_symbol))
+        if strategy.long_symbol:
+            close_tasks.append(self._close_symbol_position(strategy.long_symbol, strategy))
         
         # Close short positions if symbol is not null
-        if short_symbol:
-            close_tasks.append(self._close_symbol_position(short_symbol))
+        if strategy.short_symbol:
+            close_tasks.append(self._close_symbol_position(strategy.short_symbol, strategy))
         
         # Wait for all close tasks to complete
         if close_tasks:
             await asyncio.gather(*close_tasks)
         else:
-            logger.info("No symbols to close positions for")
+            logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} no_symbols_to_close")
 
-    async def _buy_symbol(self, symbol: str):
+    async def _buy_symbol(self, symbol: str, strategy: Strategy):
         """
-        Buy a symbol with retry logic:
+        Buy a symbol with retry logic for a strategy:
         1. Buy 1 share to get current price
         2. Calculate max shares
         3. Buy max shares with retry logic
         """
-        logger.info(f"Buying {symbol}")
+        logger.info(f"🔥 BUYING SHARES: strategy={strategy.name} symbol={symbol} attempting_purchase")
         
         # 1. Buy 1 share to get current price
-        success, price, response = await self.api_client.buy_symbol(symbol, 1)
+        success, price, response = await self.api_client.buy_symbol(symbol, 1, strategy)
         
         if not success or price is None:
-            logger.error(f"Failed to get price for {symbol}")
+            logger.error(f"🔥 ERROR: strategy={strategy.name} symbol={symbol} failed_to_get_price")
             return
         
         # 2. Calculate max shares based on current cash balance and price
-        max_shares = self.cash_manager.get_max_shares(price)
+        max_shares = self.cash_manager.get_max_shares(price, strategy)
         
         if max_shares <= 0:
-            logger.info(f"Not enough cash to buy any shares of {symbol}")
+            logger.info(f"🔥 ERROR: strategy={strategy.name} insufficient_cash={strategy.cash_balance} required={price} buy_failed")
             return
         
         # 3. Try to buy max shares with retry logic
-        logger.info(f"Attempting to buy {max_shares} shares of {symbol}")
+        logger.info(f"🔥 BUYING SHARES: strategy={strategy.name} symbol={symbol} max_shares={max_shares} attempting_purchase")
         
         retries = 0
         shares_to_buy = max_shares
         
         while retries < MAX_BUY_RETRIES:
-            success, _, response = await self.api_client.buy_symbol(symbol, shares_to_buy)
+            success, final_price, response = await self.api_client.buy_symbol(symbol, shares_to_buy, strategy)
             
             if success:
-                logger.info(f"Successfully bought {shares_to_buy} shares of {symbol}")
+                logger.info(f"🔥 API RESPONSE: strategy={strategy.name} action=buy symbol={symbol} price={final_price} quantity={shares_to_buy}")
                 # Reduce cash balance by the amount spent
-                self.state_manager.cash_balance -= (shares_to_buy * price)
+                if final_price:
+                    self.cash_manager.update_balance_from_buy(final_price, shares_to_buy, strategy)
                 return
             
             # Calculate reduced shares for retry (ensure at least 1 fewer share)
             reduction = max(1, int(shares_to_buy * BUY_RETRY_REDUCTION_PERCENT / 100))
             shares_to_buy = max(1, shares_to_buy - reduction)
             
-            logger.info(f"Retrying with {shares_to_buy} shares (retry {retries+1}/{MAX_BUY_RETRIES})")
+            logger.info(f"🔥 BUY RETRY: strategy={strategy.name} symbol={symbol} shares={shares_to_buy} retry={retries+1}/{MAX_BUY_RETRIES}")
             retries += 1
             await asyncio.sleep(3)  # Pause before retry
         
-        logger.error(f"Failed to buy {symbol} after {MAX_BUY_RETRIES} attempts")
+        logger.error(f"🔥 ERROR: strategy={strategy.name} symbol={symbol} max_buy_retries_exceeded={MAX_BUY_RETRIES}")
 
-    async def _close_symbol_position(self, symbol: str):
+    async def _close_symbol_position(self, symbol: str, strategy: Strategy):
         """
         Close positions for a symbol, retrying until successful
         """
-        logger.info(f"Closing positions for {symbol}")
+        logger.info(f"🔥 CLOSING POSITIONS: strategy={strategy.name} symbol={symbol} calling_api")
         
         while True:
-            success, price, quantity, response = await self.api_client.close_position(symbol)
+            success, price, quantity, response = await self.api_client.close_position(symbol, strategy)
             
             if success:
-                logger.info(f"Successfully closed positions for {symbol}")
+                logger.info(f"🔥 CLOSE COMPLETE: strategy={strategy.name} symbol={symbol} success=true")
                 
                 # Update cash balance if position was actually closed (not just "accepted" due to no positions)
                 if price is not None and quantity is not None:
-                    self.cash_manager.update_balance_from_close(price, quantity)
+                    self.cash_manager.update_balance_from_close(price, quantity, strategy)
                 
                 return
             
-            logger.warning(f"Failed to close positions for {symbol}, retrying...")
+            logger.warning(f"🔥 CLOSE RETRY: strategy={strategy.name} symbol={symbol} retrying_in_3s")
             await asyncio.sleep(3)  # Pause before retry
+
+    # Force methods for manual trading (bypass cooldown)
+    async def force_long(self, strategy: Strategy):
+        """Force a long position for a strategy (bypasses cooldown)"""
+        logger.info(f"🔥 MANUAL FORCE: strategy={strategy.name} action=force_long")
+        strategy.is_processing = True
+        try:
+            await self._process_long_signal(strategy)
+        finally:
+            strategy.is_processing = False
+
+    async def force_short(self, strategy: Strategy):
+        """Force a short position for a strategy (bypasses cooldown)"""
+        logger.info(f"🔥 MANUAL FORCE: strategy={strategy.name} action=force_short")
+        strategy.is_processing = True
+        try:
+            await self._process_short_signal(strategy)
+        finally:
+            strategy.is_processing = False
+
+    async def force_close(self, strategy: Strategy):
+        """Force close all positions for a strategy (bypasses cooldown)"""
+        logger.info(f"🔥 MANUAL FORCE: strategy={strategy.name} action=force_close")
+        strategy.is_processing = True
+        try:
+            await self._close_all_positions(strategy)
+        finally:
+            strategy.is_processing = False
