@@ -1,4 +1,4 @@
-/* static/style.css - Dashboard styles (Dark Mode) */
+/* static/style.css - Multi-Strategy Dashboard styles (Dark Mode) */
 * {
     box-sizing: border-box;
     margin: 0;
@@ -76,28 +76,248 @@ h2 {
     padding-bottom: 5px;
 }
 
-.status-section,
+/* Tabs Styling */
+.tabs-container {
+    margin-bottom: 30px;
+}
+
+.tabs-header {
+    display: flex;
+    gap: 2px;
+    background-color: #1e293b;
+    border-radius: 8px 8px 0 0;
+    padding: 10px 10px 0 10px;
+    overflow-x: auto;
+}
+
+.tab-button {
+    background-color: #334155;
+    color: #94a3b8;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+    min-width: 120px;
+    text-align: center;
+    border-bottom: 3px solid transparent;
+}
+
+.tab-button:hover {
+    background-color: #475569;
+    color: #e4e4e7;
+}
+
+.tab-button.active {
+    background-color: #60a5fa;
+    color: #000;
+    border-bottom-color: #3b82f6;
+}
+
+.tab-create {
+    background-color: #059669 !important;
+    color: white !important;
+    font-weight: bold;
+    font-size: 18px;
+    min-width: 50px;
+}
+
+.tab-create:hover {
+    background-color: #047857 !important;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    background-color: #1e293b;
+    border-radius: 8px;
+    border: 2px dashed #374151;
+}
+
+.empty-state h2 {
+    color: #f1f5f9;
+    margin-bottom: 15px;
+    border: none;
+}
+
+.empty-state p {
+    color: #94a3b8;
+    margin-bottom: 30px;
+    font-size: 1.1rem;
+}
+
+.create-strategy-btn {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    font-weight: 500;
+    transition: background-color 0.3s;
+}
+
+.create-strategy-btn:hover {
+    background-color: #2563eb;
+}
+
+/* Modal Styling */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: #1e293b;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #374151;
+}
+
+.modal-header h3 {
+    color: #f1f5f9;
+    margin: 0;
+}
+
+.modal-close {
+    font-size: 28px;
+    font-weight: bold;
+    color: #94a3b8;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: #e4e4e7;
+}
+
+.modal form {
+    padding: 20px;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+.form-actions button {
+    padding: 10px 20px;
+}
+
+.form-actions button[type="submit"] {
+    background-color: #3b82f6;
+}
+
+.form-actions button[type="submit"]:hover {
+    background-color: #2563eb;
+}
+
+/* Strategy Content */
+.strategy-content {
+    background-color: #1e293b;
+    border-radius: 0 8px 8px 8px;
+    padding: 30px;
+}
+
+/* Webhook URLs Section */
+.webhook-section {
+    margin-bottom: 30px;
+}
+
+.webhook-card {
+    background-color: #334155;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.webhook-url-group {
+    margin-bottom: 15px;
+}
+
+.webhook-url-group:last-child {
+    margin-bottom: 0;
+}
+
+.webhook-url-group label {
+    display: block;
+    color: #cbd5e1;
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+.url-input-group {
+    display: flex;
+    gap: 10px;
+}
+
+.url-input-group input {
+    flex: 1;
+    padding: 10px;
+    background-color: #475569;
+    border: 1px solid #64748b;
+    border-radius: 4px;
+    color: #e4e4e7;
+    font-family: monospace;
+    font-size: 0.9rem;
+}
+
+.url-input-group button {
+    background-color: #059669;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    white-space: nowrap;
+}
+
+.url-input-group button:hover {
+    background-color: #047857;
+}
+
+/* Existing section styles */
 .symbols-section,
 .manual-section,
 .cash-section,
 .cooldown-section,
 .api-section {
     margin-bottom: 30px;
-    background-color: #1e293b;
+    background-color: #334155;
     border-radius: 8px;
     padding: 20px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-    border: 1px solid #334155;
+    border: 1px solid #475569;
 }
 
-.status-card,
 .symbols-card,
 .manual-card,
 .cash-card,
 .cooldown-card {
-    background-color: #334155;
-    border-radius: 5px;
-    padding: 15px;
+    /* Remove background since parent already has it */
 }
 
 .status-item,
@@ -347,10 +567,10 @@ button:disabled {
 }
 
 .api-call {
-    background-color: #334155;
+    background-color: #475569;
     border-radius: 5px;
     padding: 15px;
-    border: 1px solid #475569;
+    border: 1px solid #64748b;
 }
 
 .api-call-header {
@@ -358,7 +578,7 @@ button:disabled {
     justify-content: space-between;
     margin-bottom: 10px;
     padding-bottom: 10px;
-    border-bottom: 1px solid #475569;
+    border-bottom: 1px solid #64748b;
 }
 
 .timestamp {
@@ -400,19 +620,51 @@ h4 {
 }
 
 pre {
-    background-color: #475569;
+    background-color: #334155;
     color: #e4e4e7;
     padding: 10px;
     border-radius: 4px;
     overflow-x: auto;
     font-size: 0.85rem;
-    border: 1px solid #64748b;
+    border: 1px solid #475569;
 }
 
 .no-api-calls {
     text-align: center;
     padding: 30px;
     color: #94a3b8;
+}
+
+/* Strategy Actions */
+.strategy-actions {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 2px solid #374151;
+    text-align: center;
+}
+
+.delete-strategy-btn {
+    background-color: #dc2626;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.3s;
+}
+
+.delete-strategy-btn:hover {
+    background-color: #b91c1c;
+}
+
+.manual-warning {
+    background-color: #7f1d1d;
+    color: #fca5a5;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    text-align: center;
 }
 
 @media (max-width: 768px) {
@@ -437,5 +689,21 @@ pre {
 
     .toast {
         max-width: none;
+    }
+
+    .tabs-header {
+        flex-wrap: wrap;
+    }
+
+    .tab-button {
+        min-width: 100px;
+    }
+
+    .url-input-group {
+        flex-direction: column;
+    }
+
+    .url-input-group button {
+        width: 100%;
     }
 }
