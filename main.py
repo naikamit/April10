@@ -65,8 +65,8 @@ async def webhook(signal: str, background_tasks: BackgroundTasks):
         logger.info(f"Received webhook signal: {signal}")
         
         # Validate signal type
-        if signal not in ["long", "short"]:
-            raise HTTPException(status_code=400, detail=f"Invalid signal: {signal}. Must be 'long' or 'short'")
+        if signal not in ["long", "short", "close"]:
+            raise HTTPException(status_code=400, detail=f"Invalid signal: {signal}. Must be 'long', 'short', or 'close'")
         
         # Process signal in background to avoid webhook timeout
         background_tasks.add_task(signal_processor.process_signal, signal)
