@@ -46,6 +46,8 @@ class SignalProcessor:
                     await self._process_long_signal()
                 elif signal_type == "short":
                     await self._process_short_signal()
+                elif signal_type == "close":
+                    await self._close_all_positions()
                 else:
                     logger.error(f"Unknown signal type: {signal_type}")
                     self.state_manager.set_processing(False)
