@@ -1,47 +1,55 @@
-# cooldown_manager.py - Cool down period logic
+# cooldown_manager.py - Cool down period logic (strategy-aware)
 import logging
 from datetime import datetime, timedelta
-from state_manager import StateManager
+from strategy import Strategy
 from config import COOLDOWN_PERIOD_HOURS
 
 logger = logging.getLogger(__name__)
 
 class CooldownManager:
     def __init__(self):
-        self.state_manager = StateManager()
+        pass
 
-    def start_cooldown(self):
+    def start_cooldown(self, strategy: Strategy):
         """
-        Start the cooldown period
+        Start the cooldown period for a specific strategy
+        
+        Args:
+            strategy: Strategy instance to start cooldown for
         """
-        logger.info(f"Starting cooldown period for {COOLDOWN_PERIOD_HOURS} hours")
-        self.state_manager.start_cooldown(COOLDOWN_PERIOD_HOURS)
+        logger.info(f"🔥 COOLDOWN STARTED: strategy={strategy.name} duration={COOLDOWN_PERIOD_HOURS}h end_time={strategy.cooldown_end_time}")
+        strategy.start_cooldown(COOLDOWN_PERIOD_HOURS)
 
-    def is_in_cooldown(self):
+    def is_in_cooldown(self, strategy: Strategy) -> bool:
         """
-        Check if we're currently in the cooldown period
-        """
-        return self.state_manager.check_cooldown()
-
-    def get_cooldown_info(self):
-        """
-        Get information about the current cooldown state
-        """
-        if not self.state_manager.in_cooldown:
-            return {"active": False}
+        Check if a strategy is currently in the cooldown period
+        
+        Args:
+            strategy: Strategy instance to check
             
-        now = datetime.now()
-        end_time = self.state_manager.cooldown_end_time
-        remaining = end_time - now
+        Returns:
+            True if in cooldown, False otherwise
+        """
+        return strategy.check_cooldown()
+
+    def stop_cooldown(self, strategy: Strategy):
+        """
+        Manually stop cooldown period for a strategy
         
-        hours = int(remaining.total_seconds() // 3600)
-        minutes = int((remaining.total_seconds() % 3600) // 60)
+        Args:
+            strategy: Strategy instance to stop cooldown for
+        """
+        strategy.stop_cooldown()
+        logger.info(f"🔥 COOLDOWN STOPPED: strategy={strategy.name} manually_stopped=true")
+
+    def get_cooldown_info(self, strategy: Strategy) -> dict:
+        """
+        Get information about the current cooldown state for a strategy
         
-        return {
-            "active": True,
-            "end_time": end_time.isoformat(),
-            "remaining": {
-                "hours": hours,
-                "minutes": minutes
-            }
-        }
+        Args:
+            strategy: Strategy instance to get cooldown info for
+            
+        Returns:
+            Dictionary with cooldown information
+        """
+        return strategy.get_cooldown_info()
