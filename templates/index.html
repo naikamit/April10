@@ -1,10 +1,10 @@
-<!-- templates/index.html - Dashboard template -->
+<!-- templates/index.html - Multi-Strategy Dashboard template -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trading Webhook Dashboard</title>
+    <title>Multi-Strategy Trading Dashboard</title>
     <link rel="stylesheet" href="/static/style.css">
     <meta http-equiv="refresh" content="60">
 </head>
@@ -12,144 +12,253 @@
     <div id="toast-container"></div>
 
     <div class="container">
-        <div class="symbols-section">
-            <h2>Trading Symbols</h2>
-            <div class="symbols-card">
-                <div class="symbol-display">
-                    <div class="symbol-item">
-                        <span class="label">Long Symbol:</span>
-                        <span class="symbol-value">{{ long_symbol if long_symbol else "Not set" }}</span>
-                    </div>
-                    <div class="symbol-item">
-                        <span class="label">Short Symbol:</span>
-                        <span class="symbol-value">{{ short_symbol if short_symbol else "Not set" }}</span>
-                    </div>
+        <h1>Multi-Strategy Trading Dashboard</h1>
+        
+        <!-- Strategy Tabs -->
+        <div class="tabs-container">
+            <div class="tabs-header">
+                {% for strategy in strategies %}
+                <div class="tab-button" data-strategy="{{ strategy.name }}" onclick="switchToStrategy('{{ strategy.name }}')">
+                    {{ strategy.display_name }}
                 </div>
-                
-                <form id="symbol-form" class="update-form">
-                    <h3>Update Trading Symbols</h3>
-                    <div class="symbols-form-group">
-                        <div class="form-field">
-                            <label for="long_symbol">Long Symbol:</label>
-                            <input type="text" name="long_symbol" id="long_symbol" 
-                                   value="{{ long_symbol if long_symbol else '' }}" 
-                                   placeholder="e.g., MSTU"
-                                   onkeypress="if(event.key==='Enter') updateSymbols()">
-                        </div>
-                        <div class="form-field">
-                            <label for="short_symbol">Short Symbol:</label>
-                            <input type="text" name="short_symbol" id="short_symbol" 
-                                   value="{{ short_symbol if short_symbol else '' }}" 
-                                   placeholder="e.g., MSTZ"
-                                   onkeypress="if(event.key==='Enter') updateSymbols()">
-                        </div>
-                        <button type="button" onclick="updateSymbols()">Update Symbols</button>
-                    </div>
-                </form>
+                {% endfor %}
+                <div class="tab-button tab-create" onclick="showCreateStrategy()">+</div>
             </div>
         </div>
-        
-        <div class="manual-section">
-            <h2>Manual Trading</h2>
-            <div class="manual-card">
-                <div class="manual-warning">
-                    <strong>Warning:</strong> These actions bypass cooldown periods and execute immediately.
-                </div>
-                <div class="manual-controls">
-                    <button type="button" class="manual-btn force-long" onclick="forceLong()">Force Long</button>
-                    <button type="button" class="manual-btn force-short" onclick="forceShort()">Force Short</button>
-                    <button type="button" class="manual-btn force-close" onclick="forceClose()">Force Close</button>
-                </div>
-            </div>
+
+        <!-- Empty State (when no strategies exist) -->
+        {% if not strategies %}
+        <div class="empty-state">
+            <h2>Welcome to Multi-Strategy Trading</h2>
+            <p>Create your first strategy to get started with automated trading.</p>
+            <button class="create-strategy-btn" onclick="showCreateStrategy()">Create Your First Strategy</button>
         </div>
-        
-        <div class="cash-section">
-            <h2>Cash Balance</h2>
-            <div class="cash-card">
-                <div class="cash-amount">${{ "%.2f"|format(cash_info.balance) }}</div>
-                <div class="cash-details">
-                    <div>Source: {{ cash_info.source }}</div>
-                    <div>Last updated: 
-                        {% if cash_info.staleness.days > 0 %}
-                            {{ cash_info.staleness.days }} days
-                        {% endif %}
-                        {% if cash_info.staleness.hours > 0 %}
-                            {{ cash_info.staleness.hours }} hours
-                        {% endif %}
-                        {{ cash_info.staleness.minutes }} minutes ago
-                    </div>
+        {% endif %}
+
+        <!-- Create Strategy Form -->
+        <div id="create-strategy-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Create New Strategy</h3>
+                    <span class="modal-close" onclick="hideCreateStrategy()">&times;</span>
                 </div>
-                
-                <form id="cash-form" class="update-form">
-                    <h3>Update Cash Balance</h3>
+                <form id="create-strategy-form">
                     <div class="form-group">
-                        <input type="number" id="cash_amount" step="0.01" required 
-                               placeholder="Enter new balance"
-                               onkeypress="if(event.key==='Enter') updateCash()">
-                        <button type="button" onclick="updateCash()">Update</button>
+                        <label for="strategy-name">Strategy Name (URL-safe):</label>
+                        <input type="text" id="strategy-name" required 
+                               placeholder="e.g., momentum_strategy" 
+                               pattern="[a-zA-Z0-9_]{3,50}"
+                               title="Alphanumeric and underscores only, 3-50 characters">
+                        <small>Only letters, numbers, and underscores. Will be used in webhook URLs.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="strategy-long-symbol">Long Symbol (optional):</label>
+                        <input type="text" id="strategy-long-symbol" placeholder="e.g., MSTU">
+                    </div>
+                    <div class="form-group">
+                        <label for="strategy-short-symbol">Short Symbol (optional):</label>
+                        <input type="text" id="strategy-short-symbol" placeholder="e.g., MSTZ">
+                    </div>
+                    <div class="form-group">
+                        <label for="strategy-cash">Initial Cash Balance:</label>
+                        <input type="number" id="strategy-cash" step="0.01" value="0" min="0">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" onclick="hideCreateStrategy()">Cancel</button>
+                        <button type="submit">Create Strategy</button>
                     </div>
                 </form>
             </div>
         </div>
-        
-        <div class="cooldown-section">
-            <h2>Cooldown Status</h2>
-            <div class="cooldown-card">
-                {% if cooldown_info.active %}
-                    <div class="cooldown-active">
-                        <div class="cooldown-label">Cooldown Active</div>
-                        <div class="cooldown-timer">
-                            Time remaining: {{ cooldown_info.remaining.hours }}h {{ cooldown_info.remaining.minutes }}m
-                        </div>
-                        <div class="cooldown-end">
-                            Ends at: {{ cooldown_info.end_time }}
+
+        <!-- Strategy Content Tabs -->
+        {% for strategy in strategies %}
+        <div class="strategy-content" id="strategy-{{ strategy.name }}" style="display: none;">
+            
+            <!-- Webhook URLs Section -->
+            <div class="webhook-section">
+                <h2>Webhook URLs</h2>
+                <div class="webhook-card">
+                    <div class="webhook-url-group">
+                        <label>Long Signal URL:</label>
+                        <div class="url-input-group">
+                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.name }}/long" id="long-url-{{ strategy.name }}">
+                            <button onclick="copyToClipboard('long-url-{{ strategy.name }}')">Copy</button>
                         </div>
                     </div>
-                {% else %}
-                    <div class="cooldown-inactive">
-                        <div class="cooldown-label">Cooldown Inactive</div>
-                        <div>Ready to process signals normally</div>
+                    <div class="webhook-url-group">
+                        <label>Short Signal URL:</label>
+                        <div class="url-input-group">
+                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.name }}/short" id="short-url-{{ strategy.name }}">
+                            <button onclick="copyToClipboard('short-url-{{ strategy.name }}')">Copy</button>
+                        </div>
                     </div>
-                {% endif %}
-                
-                <div class="cooldown-controls">
-                    <button type="button" class="cooldown-btn" onclick="startCooldown()">Start Cooldown</button>
-                    <button type="button" class="cooldown-btn" onclick="stopCooldown()">Stop Cooldown</button>
+                    <div class="webhook-url-group">
+                        <label>Close Signal URL:</label>
+                        <div class="url-input-group">
+                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.name }}/close" id="close-url-{{ strategy.name }}">
+                            <button onclick="copyToClipboard('close-url-{{ strategy.name }}')">Copy</button>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-        
-        <div class="api-section">
-            <h2>API Call History</h2>
-            <div class="api-calls">
-                {% if api_calls %}
-                    {% for call in api_calls|reverse %}
-                        <div class="api-call">
-                            <div class="api-call-header">
-                                <div class="timestamp">{{ call.timestamp }}</div>
-                                <div class="status {{ call.response.status if call.response.status else 'unknown' }}">
-                                    {{ call.response.status if call.response.status else "Unknown" }}
-                                </div>
+
+            <!-- Trading Symbols Section -->
+            <div class="symbols-section">
+                <h2>Trading Symbols</h2>
+                <div class="symbols-card">
+                    <div class="symbol-display">
+                        <div class="symbol-item">
+                            <span class="label">Long Symbol:</span>
+                            <span class="symbol-value">{{ strategy.long_symbol if strategy.long_symbol else "Not set" }}</span>
+                        </div>
+                        <div class="symbol-item">
+                            <span class="label">Short Symbol:</span>
+                            <span class="symbol-value">{{ strategy.short_symbol if strategy.short_symbol else "Not set" }}</span>
+                        </div>
+                    </div>
+                    
+                    <form class="update-form">
+                        <h3>Update Trading Symbols</h3>
+                        <div class="symbols-form-group">
+                            <div class="form-field">
+                                <label>Long Symbol:</label>
+                                <input type="text" class="long-symbol-input" 
+                                       value="{{ strategy.long_symbol if strategy.long_symbol else '' }}" 
+                                       placeholder="e.g., MSTU">
                             </div>
-                            <div class="api-call-content">
-                                <div class="request">
-                                    <h4>Request</h4>
-                                    <pre>{{ call.request | tojson(indent=2) }}</pre>
-                                </div>
-                                <div class="response">
-                                    <h4>Response</h4>
-                                    <pre>{{ call.response | tojson(indent=2) }}</pre>
-                                </div>
+                            <div class="form-field">
+                                <label>Short Symbol:</label>
+                                <input type="text" class="short-symbol-input" 
+                                       value="{{ strategy.short_symbol if strategy.short_symbol else '' }}" 
+                                       placeholder="e.g., MSTZ">
+                            </div>
+                            <button type="button" onclick="updateStrategySymbols('{{ strategy.name }}')">Update Symbols</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Manual Trading Section -->
+            <div class="manual-section">
+                <h2>Manual Trading</h2>
+                <div class="manual-card">
+                    <div class="manual-warning">
+                        <strong>Warning:</strong> These actions bypass cooldown periods and execute immediately for this strategy.
+                    </div>
+                    <div class="manual-controls">
+                        <button type="button" class="manual-btn force-long" onclick="forceStrategyLong('{{ strategy.name }}')">Force Long</button>
+                        <button type="button" class="manual-btn force-short" onclick="forceStrategyShort('{{ strategy.name }}')">Force Short</button>
+                        <button type="button" class="manual-btn force-close" onclick="forceStrategyClose('{{ strategy.name }}')">Force Close</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Cash Balance Section -->
+            <div class="cash-section">
+                <h2>Cash Balance</h2>
+                <div class="cash-card">
+                    <div class="cash-amount">${{ "%.2f"|format(strategy.cash_balance) }}</div>
+                    <div class="cash-details">
+                        <div>Strategy: {{ strategy.display_name }}</div>
+                        <div>Last updated: 
+                            {% set staleness = strategy.get('staleness', {}) %}
+                            {% if staleness.get('days', 0) > 0 %}
+                                {{ staleness.days }} days
+                            {% endif %}
+                            {% if staleness.get('hours', 0) > 0 %}
+                                {{ staleness.hours }} hours
+                            {% endif %}
+                            {{ staleness.get('minutes', 0) }} minutes ago
+                        </div>
+                    </div>
+                    
+                    <form class="update-form">
+                        <h3>Update Cash Balance</h3>
+                        <div class="form-group">
+                            <input type="number" class="cash-amount-input" step="0.01" required 
+                                   placeholder="Enter new balance">
+                            <button type="button" onclick="updateStrategyCash('{{ strategy.name }}')">Update</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Cooldown Section -->
+            <div class="cooldown-section">
+                <h2>Cooldown Status</h2>
+                <div class="cooldown-card">
+                    {% if strategy.cooldown.active %}
+                        <div class="cooldown-active">
+                            <div class="cooldown-label">Cooldown Active</div>
+                            <div class="cooldown-timer">
+                                Time remaining: {{ strategy.cooldown.remaining.hours }}h {{ strategy.cooldown.remaining.minutes }}m
+                            </div>
+                            <div class="cooldown-end">
+                                Ends at: {{ strategy.cooldown.end_time }}
                             </div>
                         </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="no-api-calls">No API calls recorded yet</div>
-                {% endif %}
+                    {% else %}
+                        <div class="cooldown-inactive">
+                            <div class="cooldown-label">Cooldown Inactive</div>
+                            <div>Ready to process signals normally</div>
+                        </div>
+                    {% endif %}
+                    
+                    <div class="cooldown-controls">
+                        <button type="button" class="cooldown-btn" onclick="startStrategyCooldown('{{ strategy.name }}')">Start Cooldown</button>
+                        <button type="button" class="cooldown-btn" onclick="stopStrategyCooldown('{{ strategy.name }}')">Stop Cooldown</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- API Call History Section -->
+            <div class="api-section">
+                <h2>API Call History</h2>
+                <div class="api-calls">
+                    {% if strategy.api_calls %}
+                        {% for call in strategy.api_calls|reverse %}
+                            <div class="api-call">
+                                <div class="api-call-header">
+                                    <div class="timestamp">{{ call.timestamp }}</div>
+                                    <div class="status {{ call.response.status if call.response.status else 'unknown' }}">
+                                        {{ call.response.status if call.response.status else "Unknown" }}
+                                    </div>
+                                </div>
+                                <div class="api-call-content">
+                                    <div class="request">
+                                        <h4>Request</h4>
+                                        <pre>{{ call.request | tojson(indent=2) }}</pre>
+                                    </div>
+                                    <div class="response">
+                                        <h4>Response</h4>
+                                        <pre>{{ call.response | tojson(indent=2) }}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-api-calls">No API calls recorded yet for this strategy</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Strategy Actions -->
+            <div class="strategy-actions">
+                <button type="button" class="delete-strategy-btn" onclick="deleteStrategy('{{ strategy.name }}')">Delete Strategy</button>
             </div>
         </div>
+        {% endfor %}
     </div>
 
     <script src="/static/dashboard.js"></script>
+    <script>
+        // Initialize the first tab or show empty state
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if strategies %}
+                switchToStrategy('{{ strategies[0].name }}');
+            {% endif %}
+        });
+    </script>
 </body>
 </html>
