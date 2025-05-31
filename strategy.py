@@ -1,5 +1,5 @@
 # strategy.py - Core Strategy entity for multi-strategy trading system
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 import re
 
@@ -20,27 +20,44 @@ class Strategy:
             short_symbol: Symbol to buy for short signals (nullable) 
             cash_balance: Initial cash balance for this strategy
         """
-        if not self._is_valid_strategy_name(name):
-            raise ValueError(f"Invalid strategy name: {name}. Must be alphanumeric + underscores, 3-50 chars")
-        
-        self.name = name.lower()  # Store in lowercase for consistency
-        self.long_symbol = long_symbol.strip() if long_symbol and long_symbol.strip() else None
-        self.short_symbol = short_symbol.strip() if short_symbol and short_symbol.strip() else None
-        self.cash_balance = float(cash_balance)
-        
-        # Cooldown state
-        self.in_cooldown = False
-        self.cooldown_end_time: Optional[datetime] = None
-        
-        # Timestamps
-        self.created_at = datetime.now()
-        self.updated_at = datetime.now()
-        
-        # Processing state
-        self.is_processing = False
-        
-        # API call history for this strategy
-        self.api_calls = []
+        try:
+            if not self._is_valid_strategy_name(name):
+                raise ValueError(f"Invalid strategy name: {name}. Must be alphanumeric + underscores, 3-50 chars")
+            
+            # Set core attributes first
+            self.name = name.lower()  # Store in lowercase for URL consistency
+            self.display_name = name  # Preserve original casing for UI display
+            
+            # Process symbols
+            self.long_symbol = long_symbol.strip() if long_symbol and long_symbol.strip() else None
+            self.short_symbol = short_symbol.strip() if short_symbol and short_symbol.strip() else None
+            self.cash_balance = float(cash_balance)
+            
+            # Cooldown state
+            self.in_cooldown = False
+            self.cooldown_end_time: Optional[datetime] = None
+            
+            # Timestamps
+            self.created_at = datetime.now()
+            self.updated_at = datetime.now()
+            
+            # Processing state
+            self.is_processing = False
+            
+            # API call history for this strategy
+            self.api_calls = []
+            
+        except Exception as e:
+            # If anything fails during init, log it
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Strategy.__init__ failed for name='{name}': {str(e)}")
+            raise
+    
+    @property
+    def display_name_safe(self) -> str:
+        """Safe access to display_name with fallback"""
+        return getattr(self, 'display_name', self.name)
     
     @staticmethod
     def _is_valid_strategy_name(name: str) -> bool:
@@ -84,7 +101,6 @@ class Strategy:
     
     def start_cooldown(self, duration_hours: int):
         """Start cooldown period for this strategy"""
-        from datetime import timedelta
         self.in_cooldown = True
         self.cooldown_end_time = datetime.now() + timedelta(hours=duration_hours)
         self.updated_at = datetime.now()
@@ -148,18 +164,44 @@ class Strategy:
             }
         }
     
+    def get_cash_balance_info(self) -> dict:
+        """Get cash balance information for this strategy"""
+        staleness = datetime.now() - self.updated_at
+        minutes = staleness.total_seconds() // 60
+        hours = minutes // 60
+        days = hours // 24
+        
+        return {
+            "balance": self.cash_balance,
+            "source": "strategy",
+            "staleness": {
+                "minutes": int(minutes % 60),
+                "hours": int(hours % 24),
+                "days": int(days)
+            },
+            "updated_at": self.updated_at.isoformat()
+        }
+    
     def to_dict(self) -> dict:
         """Convert strategy to dictionary for API responses"""
+        # Ensure display_name exists for backward compatibility
+        if not hasattr(self, 'display_name'):
+            self.display_name = self.name
+        
+        cash_info = self.get_cash_balance_info()
         return {
             "name": self.name,
+            "display_name": getattr(self, 'display_name', self.name),
             "long_symbol": self.long_symbol,
             "short_symbol": self.short_symbol,
             "cash_balance": self.cash_balance,
+            "cash_info": cash_info,
             "cooldown": self.get_cooldown_info(),
             "is_processing": self.is_processing,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
-            "api_calls_count": len(self.api_calls)
+            "api_calls_count": len(self.api_calls),
+            "api_calls": getattr(self, 'api_calls', [])
         }
     
     def __repr__(self):
