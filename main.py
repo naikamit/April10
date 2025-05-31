@@ -1,4 +1,4 @@
-# main.py - Entry point, FastAPI setup
+# main.py - Entry point, FastAPI setup (multi-strategy)
 import logging
 import os
 from datetime import datetime
@@ -8,9 +8,10 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
+from typing import Optional
 
-from config import DASHBOARD_PORT, LONG_SYMBOL, SHORT_SYMBOL
-from state_manager import StateManager
+from config import DASHBOARD_PORT
+from strategy_repository import StrategyRepository
 from signal_processor import SignalProcessor
 from cash_manager import CashManager
 from cooldown_manager import CooldownManager
@@ -27,8 +28,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Initialize state
-state_manager = StateManager()
+# Initialize services
+strategy_repo = StrategyRepository()
 signal_processor = SignalProcessor()
 cash_manager = CashManager()
 cooldown_manager = CooldownManager()
@@ -36,131 +37,296 @@ cooldown_manager = CooldownManager()
 @asynccontextmanager
 async def lifespan(app):
     # Startup event
-    logger.info("Starting Trading Webhook Service")
-    
-    # Initialize symbols from config
-    state_manager.set_symbols(LONG_SYMBOL, SHORT_SYMBOL)
-    symbols = state_manager.get_symbols()
-    logger.info(f"Long Symbol: {symbols['long_symbol']}")
-    logger.info(f"Short Symbol: {symbols['short_symbol']}")
-    
+    logger.info("🔥 SYSTEM STARTUP: Multi-Strategy Trading Webhook Service")
     yield
-    
     # Shutdown event
-    logger.info("Shutting down Trading Webhook Service")
+    logger.info("🔥 SYSTEM SHUTDOWN: Multi-Strategy Trading Webhook Service")
 
 # Initialize FastAPI
-app = FastAPI(title="Trading Webhook Service", lifespan=lifespan)
+app = FastAPI(title="Multi-Strategy Trading Webhook Service", lifespan=lifespan)
 
 # Setup templates and static files
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-@app.post("/webhook/{signal}")
-async def webhook(signal: str, background_tasks: BackgroundTasks):
-    """
-    Webhook endpoint to receive signals via URL path
-    """
+# Strategy-specific webhook endpoints
+@app.post("/{strategy_name}/long")
+async def webhook_long(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """Webhook endpoint for long signals"""
+    return await _process_webhook(strategy_name, "long", request, background_tasks)
+
+@app.post("/{strategy_name}/short")
+async def webhook_short(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """Webhook endpoint for short signals"""
+    return await _process_webhook(strategy_name, "short", request, background_tasks)
+
+@app.post("/{strategy_name}/close")
+async def webhook_close(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """Webhook endpoint for close signals"""
+    return await _process_webhook(strategy_name, "close", request, background_tasks)
+
+async def _process_webhook(strategy_name: str, signal: str, request: Request, background_tasks: BackgroundTasks):
+    """Process webhook signal for a specific strategy"""
     try:
-        logger.info(f"Received webhook signal: {signal}")
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info(f"🔥 WEBHOOK RECEIVED: strategy={strategy_name} signal={signal} from_ip={client_ip}")
         
-        # Validate signal type
-        if signal not in ["long", "short", "close"]:
-            raise HTTPException(status_code=400, detail=f"Invalid signal: {signal}. Must be 'long', 'short', or 'close'")
+        # Get strategy
+        strategy = strategy_repo.get_strategy(strategy_name)
+        if not strategy:
+            available_strategies = strategy_repo.get_strategy_names()
+            error_response = {
+                "status": "error",
+                "error_type": "strategy_not_found", 
+                "message": f"Strategy '{strategy_name}' not found",
+                "available_strategies": available_strategies,
+                "help": "Create this strategy first or check the strategy name in your webhook URL"
+            }
+            logger.error(f"🔥 ERROR: strategy={strategy_name} not_found webhook_ignored")
+            return JSONResponse(status_code=404, content=error_response)
+        
+        logger.info(f"🔥 STRATEGY LOOKUP: found strategy={strategy.name} symbols={strategy.long_symbol}/{strategy.short_symbol} cash={strategy.cash_balance}")
         
         # Process signal in background to avoid webhook timeout
-        background_tasks.add_task(signal_processor.process_signal, signal)
+        background_tasks.add_task(signal_processor.process_signal, signal, strategy)
         
-        return {"status": "processing", "signal": signal}
+        return {"status": "processing", "strategy": strategy_name, "signal": signal}
+        
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: strategy={strategy_name} webhook_processing_error={str(e)}")
+        return JSONResponse(
+            status_code=500, 
+            content={
+                "status": "error",
+                "error_type": "internal_error",
+                "message": str(e),
+                "help": "Check server logs for details"
+            }
+        )
+
+# Strategy management endpoints
+@app.post("/strategies")
+async def create_strategy(
+    name: str = Form(...),
+    long_symbol: Optional[str] = Form(None),
+    short_symbol: Optional[str] = Form(None),
+    cash_balance: float = Form(0.0)
+):
+    """Create a new strategy"""
+    try:
+        # Clean up symbol inputs
+        long_symbol = long_symbol.strip() if long_symbol and long_symbol.strip() else None
+        short_symbol = short_symbol.strip() if short_symbol and short_symbol.strip() else None
+        
+        strategy = strategy_repo.create_strategy(name, long_symbol, short_symbol, cash_balance)
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: create_strategy_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/strategies")
+async def list_strategies():
+    """List all strategies"""
+    strategies = strategy_repo.get_all_strategies()
+    return {
+        "strategies": [strategy.to_dict() for strategy in strategies],
+        "count": len(strategies)
+    }
+
+@app.get("/strategies/{name}")
+async def get_strategy(name: str):
+    """Get a specific strategy"""
+    strategy = strategy_repo.get_strategy(name)
+    if not strategy:
+        raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+    return {"strategy": strategy.to_dict()}
+
+@app.put("/strategies/{name}")
+async def update_strategy(
+    name: str,
+    long_symbol: Optional[str] = Form(None),
+    short_symbol: Optional[str] = Form(None),
+    cash_balance: Optional[float] = Form(None)
+):
+    """Update a strategy"""
+    try:
+        # Clean up symbol inputs
+        if long_symbol is not None:
+            long_symbol = long_symbol.strip() if long_symbol.strip() else None
+        if short_symbol is not None:
+            short_symbol = short_symbol.strip() if short_symbol.strip() else None
+        
+        strategy = strategy_repo.update_strategy(name, long_symbol, short_symbol, cash_balance)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: update_strategy_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/strategies/{name}")
+async def delete_strategy(name: str):
+    """Delete a strategy"""
+    success = strategy_repo.delete_strategy(name)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+    return {"status": "success", "message": f"Strategy '{name}' deleted"}
+
+# Strategy-specific operations
+@app.post("/strategies/{name}/update-symbols")
+async def update_strategy_symbols(
+    name: str,
+    long_symbol: str = Form(...),
+    short_symbol: str = Form(...)
+):
+    """Update symbols for a specific strategy"""
+    try:
+        # Clean up inputs
+        long_symbol = long_symbol.strip() if long_symbol.strip() else None
+        short_symbol = short_symbol.strip() if short_symbol.strip() else None
+        
+        strategy = strategy_repo.update_strategy(name, long_symbol=long_symbol, short_symbol=short_symbol)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: update_symbols_error={str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/strategies/{name}/update-cash")
+async def update_strategy_cash(name: str, cash_amount: float = Form(...)):
+    """Update cash balance for a specific strategy"""
+    try:
+        strategy = strategy_repo.get_strategy(name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+        
+        success = cash_manager.update_balance_manual(cash_amount, strategy)
+        if not success:
+            raise HTTPException(status_code=400, detail="Invalid cash amount")
+        
+        return {"status": "success", "strategy": strategy.to_dict()}
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Error processing webhook: {str(e)}")
+        logger.exception(f"🔥 ERROR: update_cash_error={str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/strategies/{name}/start-cooldown")
+async def start_strategy_cooldown(name: str):
+    """Start cooldown for a specific strategy"""
+    try:
+        strategy = strategy_repo.get_strategy(name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+        
+        cooldown_manager.start_cooldown(strategy)
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: start_cooldown_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/strategies/{name}/stop-cooldown")
+async def stop_strategy_cooldown(name: str):
+    """Stop cooldown for a specific strategy"""
+    try:
+        strategy = strategy_repo.get_strategy(name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+        
+        cooldown_manager.stop_cooldown(strategy)
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: stop_cooldown_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/strategies/{name}/force-long")
+async def force_strategy_long(name: str, background_tasks: BackgroundTasks):
+    """Force long position for a specific strategy"""
+    try:
+        strategy = strategy_repo.get_strategy(name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+        
+        if strategy.is_processing:
+            return {"status": "error", "message": "Strategy is already processing a signal"}
+        
+        background_tasks.add_task(signal_processor.force_long, strategy)
+        return {"status": "success", "message": f"Force long initiated for strategy '{name}'"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_long_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/strategies/{name}/force-short")
+async def force_strategy_short(name: str, background_tasks: BackgroundTasks):
+    """Force short position for a specific strategy"""
+    try:
+        strategy = strategy_repo.get_strategy(name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+        
+        if strategy.is_processing:
+            return {"status": "error", "message": "Strategy is already processing a signal"}
+        
+        background_tasks.add_task(signal_processor.force_short, strategy)
+        return {"status": "success", "message": f"Force short initiated for strategy '{name}'"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_short_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/strategies/{name}/force-close")
+async def force_strategy_close(name: str, background_tasks: BackgroundTasks):
+    """Force close all positions for a specific strategy"""
+    try:
+        strategy = strategy_repo.get_strategy(name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
+        
+        if strategy.is_processing:
+            return {"status": "error", "message": "Strategy is already processing a signal"}
+        
+        background_tasks.add_task(signal_processor.force_close, strategy)
+        return {"status": "success", "message": f"Force close initiated for strategy '{name}'"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_close_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Dashboard endpoints
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    """
-    Dashboard to display system status
-    """
-    cash_info = state_manager.get_cash_balance_info()
-    cooldown_info = cooldown_manager.get_cooldown_info()
-    api_calls = state_manager.get_api_calls()
-    symbols = state_manager.get_symbols()
-    
+    """Multi-strategy dashboard"""
+    strategies = strategy_repo.get_all_strategies()
     return templates.TemplateResponse(
         "index.html", 
         {
             "request": request,
-            "cash_info": cash_info,
-            "cooldown_info": cooldown_info,
-            "api_calls": api_calls,
-            "long_symbol": symbols["long_symbol"],
-            "short_symbol": symbols["short_symbol"],
-            "is_processing": state_manager.is_currently_processing()
+            "strategies": [strategy.to_dict() for strategy in strategies]
         }
     )
 
-@app.post("/update-cash")
-async def update_cash(cash_amount: float = Form(...)):
-    """
-    Update cash balance manually
-    """
-    success = cash_manager.update_balance_manual(cash_amount)
-    if success:
-        return {"status": "success", "cash_balance": cash_amount}
-    else:
-        raise HTTPException(status_code=400, detail="Invalid cash amount")
-
-@app.post("/update-symbols")
-async def update_symbols(long_symbol: str = Form(...), short_symbol: str = Form(...)):
-    """
-    Update trading symbols
-    """
-    try:
-        state_manager.set_symbols(long_symbol, short_symbol)
-        symbols = state_manager.get_symbols()
-        return {"status": "success", "symbols": symbols}
-    except Exception as e:
-        logger.exception(f"Error updating symbols: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/start-cooldown")
-async def start_cooldown():
-    """
-    Manually start cooldown period
-    """
-    try:
-        cooldown_manager.start_cooldown()
-        cooldown_info = cooldown_manager.get_cooldown_info()
-        return {"status": "success", "cooldown": cooldown_info}
-    except Exception as e:
-        logger.exception(f"Error starting cooldown: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/stop-cooldown") 
-async def stop_cooldown():
-    """
-    Manually stop cooldown period
-    """
-    try:
-        # Directly update state to stop cooldown
-        with state_manager._lock:
-            state_manager.in_cooldown = False
-            state_manager.cooldown_end_time = None
-            logger.info("Cooldown manually stopped")
-        
-        cooldown_info = cooldown_manager.get_cooldown_info()
-        return {"status": "success", "cooldown": cooldown_info}
-    except Exception as e:
-        logger.exception(f"Error stopping cooldown: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+# Legacy compatibility and utility endpoints
+@app.get("/status")
+async def status():
+    """Get system status"""
+    strategies = strategy_repo.get_all_strategies()
+    return {
+        "status": "ok",
+        "system": "multi-strategy",
+        "strategies": len(strategies),
+        "strategy_names": [s.name for s in strategies]
+    }
 
 @app.post("/debug")
 async def debug_log(request: Request):
-    """
-    Debug endpoint to log JavaScript activity
-    """
+    """Debug endpoint to log JavaScript activity"""
     try:
         payload = await request.json()
         message = payload.get("message", "No message")
@@ -172,89 +338,9 @@ async def debug_log(request: Request):
 
 @app.get("/debug-test")
 async def debug_test():
-    """
-    Simple debug test endpoint
-    """
+    """Simple debug test endpoint"""
     logger.info("🔥 DEBUG TEST ENDPOINT CALLED - JavaScript is working!")
     return {"status": "success", "message": "Debug test successful"}
-
-@app.post("/force-long")
-async def force_long(background_tasks: BackgroundTasks):
-    """
-    Manually force a long position (bypasses cooldown)
-    """
-    try:
-        logger.info("Manual force long initiated")
-        
-        # Check if already processing
-        if state_manager.is_currently_processing():
-            return {"status": "error", "message": "Already processing a signal"}
-        
-        # Process long signal in background (bypass cooldown)
-        background_tasks.add_task(signal_processor._process_long_signal)
-        
-        return {"status": "success", "message": "Force long initiated"}
-    except Exception as e:
-        logger.exception(f"Error in force long: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/force-short")
-async def force_short(background_tasks: BackgroundTasks):
-    """
-    Manually force a short position (bypasses cooldown)
-    """
-    try:
-        logger.info("Manual force short initiated")
-        
-        # Check if already processing
-        if state_manager.is_currently_processing():
-            return {"status": "error", "message": "Already processing a signal"}
-        
-        # Process short signal in background (bypass cooldown)
-        background_tasks.add_task(signal_processor._process_short_signal)
-        
-        return {"status": "success", "message": "Force short initiated"}
-    except Exception as e:
-        logger.exception(f"Error in force short: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/force-close")
-async def force_close(background_tasks: BackgroundTasks):
-    """
-    Manually close all positions (bypasses cooldown)
-    """
-    try:
-        logger.info("Manual force close all positions initiated")
-        
-        # Check if already processing
-        if state_manager.is_currently_processing():
-            return {"status": "error", "message": "Already processing a signal"}
-        
-        # Close all positions in background (bypass cooldown)
-        background_tasks.add_task(signal_processor._close_all_positions)
-        
-        return {"status": "success", "message": "Force close all initiated"}
-    except Exception as e:
-        logger.exception(f"Error in force close: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/status")
-async def status():
-    """
-    Get current system status
-    """
-    cash_info = state_manager.get_cash_balance_info()
-    cooldown_info = cooldown_manager.get_cooldown_info()
-    symbols = state_manager.get_symbols()
-    
-    return {
-        "status": "ok",
-        "cash_balance": cash_info,
-        "cooldown": cooldown_info,
-        "is_processing": state_manager.is_currently_processing(),
-        "long_symbol": symbols["long_symbol"],
-        "short_symbol": symbols["short_symbol"]
-    }
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", DASHBOARD_PORT))
