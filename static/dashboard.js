@@ -232,7 +232,16 @@ function stopStrategyCooldown(strategyName) {
 
 function updateCooldownDisplay(strategyName, cooldownData) {
     const strategyDiv = document.getElementById(`strategy-${strategyName}`);
-    const statusDiv = strategyDiv.querySelector('.cooldown-card > div:first-child');
+    if (!strategyDiv) {
+        console.error(`Strategy div not found: ${strategyName}`);
+        return;
+    }
+    
+    const statusDiv = strategyDiv.querySelector('.cooldown-active, .cooldown-inactive');
+    if (!statusDiv) {
+        console.error(`Cooldown status div not found for strategy: ${strategyName}`);
+        return;
+    }
     
     // Clear existing timer for this strategy
     if (cooldownTimers[strategyName]) {
@@ -301,7 +310,7 @@ function initializeCooldownTimers() {
         
         if (cooldownStatus) {
             // Check if there's an end time in the DOM
-            const endTimeElement = strategyDiv.querySelector('.cooldown-end');
+            const endTimeElement = cooldownStatus.querySelector('.cooldown-end');
             if (endTimeElement) {
                 const endTimeText = endTimeElement.textContent;
                 const endTimeMatch = endTimeText.match(/Ends at: (.+)/);
