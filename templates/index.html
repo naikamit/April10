@@ -51,11 +51,11 @@
                                title="Alphanumeric and underscores only, 3-50 characters">
                     </div>
                     <div class="form-group">
-                        <label for="strategy-long-symbol">Long Symbol (optional):</label>
+                        <label for="strategy-long-symbol">Long (optional):</label>
                         <input type="text" id="strategy-long-symbol" placeholder="e.g., MSTU">
                     </div>
                     <div class="form-group">
-                        <label for="strategy-short-symbol">Short Symbol (optional):</label>
+                        <label for="strategy-short-symbol">Short (optional):</label>
                         <input type="text" id="strategy-short-symbol" placeholder="e.g., MSTZ">
                     </div>
                     <div class="form-group">
@@ -76,7 +76,7 @@
             
             <!-- Webhook URLs Section -->
             <div class="webhook-section">
-                <h2>Webhook URLs</h2>
+                <h2>Webhooks</h2>
                 <div class="webhook-card">
                     <div class="webhook-url-group">
                         <label>Long Signal URL:</label>
@@ -104,35 +104,35 @@
 
             <!-- Trading Symbols Section -->
             <div class="symbols-section">
-                <h2>Trading Symbols</h2>
+                <h2>Symbols</h2>
                 <div class="symbols-card">
                     <div class="symbol-display">
                         <div class="symbol-item">
-                            <span class="label">Long Symbol:</span>
+                            <span class="label">Long:</span>
                             <span class="symbol-value">{{ strategy.get('long_symbol') or "Not set" }}</span>
                         </div>
                         <div class="symbol-item">
-                            <span class="label">Short Symbol:</span>
+                            <span class="label">Short:</span>
                             <span class="symbol-value">{{ strategy.get('short_symbol') or "Not set" }}</span>
                         </div>
                     </div>
                     
                     <form class="update-form">
-                        <h3>Update Trading Symbols</h3>
+                        <h3>Update Symbols</h3>
                         <div class="symbols-form-group">
                             <div class="form-field">
-                                <label>Long Symbol:</label>
+                                <label>Long:</label>
                                 <input type="text" class="long-symbol-input" 
                                        value="{{ strategy.get('long_symbol') or '' }}" 
                                        placeholder="e.g., MSTU">
                             </div>
                             <div class="form-field">
-                                <label>Short Symbol:</label>
+                                <label>Short:</label>
                                 <input type="text" class="short-symbol-input" 
                                        value="{{ strategy.get('short_symbol') or '' }}" 
                                        placeholder="e.g., MSTZ">
                             </div>
-                            <button type="button" onclick="updateStrategySymbols('{{ strategy.get('name', 'unknown') }}')">Update Symbols</button>
+                            <button type="button" onclick="updateStrategySymbols('{{ strategy.get('name', 'unknown') }}')">Update</button>
                         </div>
                     </form>
                 </div>
@@ -140,7 +140,7 @@
             
             <!-- Manual Trading Section -->
             <div class="manual-section">
-                <h2>Manual Trading</h2>
+                <h2>Override</h2>
                 <div class="manual-card">
                     <div class="manual-controls">
                         <button type="button" class="manual-btn force-long" onclick="forceStrategyLong('{{ strategy.get('name', 'unknown') }}')">Force Long</button>
@@ -152,7 +152,7 @@
             
             <!-- Cash Balance Section -->
             <div class="cash-section">
-                <h2>Cash Balance</h2>
+                <h2>Options BP</h2>
                 <div class="cash-card">
                     <div class="cash-amount">${{ "%.2f"|format(strategy.get('cash_balance', 0) or 0) }}</div>
                     <div class="cash-details">
@@ -174,7 +174,6 @@
                     </div>
                     
                     <form class="update-form">
-                        <h3>Update Cash Balance</h3>
                         <div class="form-group">
                             <input type="number" class="cash-amount-input" step="0.01" required 
                                    placeholder="Enter new balance">
@@ -186,7 +185,7 @@
             
             <!-- Cooldown Section -->
             <div class="cooldown-section">
-                <h2>Cooldown Status</h2>
+                <h2>Cooldown</h2>
                 <div class="cooldown-card">
                     {% set cooldown = strategy.get('cooldown', {}) %}
                     {% if cooldown.get('active') %}
@@ -215,7 +214,7 @@
             
             <!-- API Call History Section -->
             <div class="api-section">
-                <h2>API Call History</h2>
+                <h2>API Logs</h2>
                 <div class="api-calls">
                     {% if strategy.get('api_calls') and strategy.api_calls|length > 0 %}
                         {% for call in strategy.api_calls|reverse %}
