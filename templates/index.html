@@ -74,24 +74,24 @@
             
             <!-- Webhook URLs Section -->
             <div class="webhook-section">
-                <h2>Webhooks</h2>
                 <div class="webhook-card">
+                    <h2>Webhooks</h2>
                     <div class="webhook-url-group">
-                        <label>Long Signal URL:</label>
+                        <label>Long:</label>
                         <div class="url-input-group">
                             <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/long" id="long-url-{{ strategy.get('name', 'unknown') }}">
                             <button onclick="copyToClipboard('long-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
                         </div>
                     </div>
                     <div class="webhook-url-group">
-                        <label>Short Signal URL:</label>
+                        <label>Short:</label>
                         <div class="url-input-group">
                             <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/short" id="short-url-{{ strategy.get('name', 'unknown') }}">
                             <button onclick="copyToClipboard('short-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
                         </div>
                     </div>
                     <div class="webhook-url-group">
-                        <label>Close Signal URL:</label>
+                        <label>Close:</label>
                         <div class="url-input-group">
                             <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/close" id="close-url-{{ strategy.get('name', 'unknown') }}">
                             <button onclick="copyToClipboard('close-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
@@ -102,8 +102,8 @@
 
             <!-- Trading Symbols Section -->
             <div class="symbols-section">
-                <h2>Symbols</h2>
                 <div class="symbols-card">
+                    <h2>Symbols</h2>
                     <div class="symbol-display">
                         <div class="symbol-item">
                             <span class="label">Long:</span>
@@ -138,8 +138,8 @@
             
             <!-- Manual Trading Section -->
             <div class="manual-section">
-                <h2>Override</h2>
                 <div class="manual-card">
+                    <h2>Override</h2>
                     <div class="manual-controls">
                         <button type="button" class="manual-btn force-long" onclick="forceStrategyLong('{{ strategy.get('name', 'unknown') }}')">Force Long</button>
                         <button type="button" class="manual-btn force-short" onclick="forceStrategyShort('{{ strategy.get('name', 'unknown') }}')">Force Short</button>
@@ -150,8 +150,8 @@
             
             <!-- Cash Balance Section -->
             <div class="cash-section">
-                <h2>Options BP</h2>
                 <div class="cash-card">
+                    <h2>Options BP</h2>
                     <div class="cash-amount">${{ "%.2f"|format(strategy.get('cash_balance', 0) or 0) }}</div>
                     <div class="cash-details">
                         <div>Strategy: {{ strategy.get('display_name', strategy.get('name', 'Unknown')) }}</div>
@@ -183,8 +183,8 @@
             
             <!-- Cooldown Section -->
             <div class="cooldown-section">
-                <h2>Cooldown</h2>
                 <div class="cooldown-card">
+                    <h2>Cooldown</h2>
                     {% set cooldown = strategy.get('cooldown', {}) %}
                     {% if cooldown.get('active') %}
                         <div class="cooldown-active">
@@ -212,8 +212,8 @@
             
             <!-- API Call History Section -->
             <div class="api-section">
-                <h2>API Logs</h2>
                 <div class="api-calls">
+                    <h2>API Logs</h2>
                     {% if strategy.get('api_calls') and strategy.api_calls|length > 0 %}
                         {% for call in strategy.api_calls|reverse %}
                             <div class="api-call">
