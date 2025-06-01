@@ -1,403 +1,272 @@
-# main.py - Entry point, FastAPI setup (multi-strategy)
-import logging
-import os
-from datetime import datetime
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Form, BackgroundTasks, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-import uvicorn
-from typing import Optional
+<!-- templates/index.html - Multi-Strategy Dashboard template (SAFE VERSION) -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Strategy Trading Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <meta http-equiv="refresh" content="60">
+</head>
+<body>
+    <div id="toast-container"></div>
 
-from config import DASHBOARD_PORT
-from strategy_repository import StrategyRepository
-from signal_processor import SignalProcessor
-from cash_manager import CashManager
-from cooldown_manager import CooldownManager
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('webhook.log')
-    ]
-)
-
-logger = logging.getLogger(__name__)
-
-# Initialize services
-strategy_repo = StrategyRepository()
-signal_processor = SignalProcessor()
-cash_manager = CashManager()
-cooldown_manager = CooldownManager()
-
-@asynccontextmanager
-async def lifespan(app):
-    # Startup event
-    logger.info("🔥 SYSTEM STARTUP: Multi-Strategy Trading Webhook Service")
-    
-    # Ensure all existing strategies have proper attributes
-    try:
-        strategies = strategy_repo.get_all_strategies()
-        logger.info(f"🔥 SYSTEM STARTUP: Found {len(strategies)} existing strategies")
-    except Exception as e:
-        logger.error(f"🔥 SYSTEM STARTUP: Error loading strategies: {e}")
-    
-    yield
-    # Shutdown event
-    logger.info("🔥 SYSTEM SHUTDOWN: Multi-Strategy Trading Webhook Service")
-
-# Initialize FastAPI
-app = FastAPI(title="Multi-Strategy Trading Webhook Service", lifespan=lifespan)
-
-# Setup templates and static files
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Strategy-specific webhook endpoints
-@app.post("/{strategy_name}/long")
-async def webhook_long(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
-    """Webhook endpoint for long signals"""
-    return await _process_webhook(strategy_name, "long", request, background_tasks)
-
-@app.post("/{strategy_name}/short")
-async def webhook_short(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
-    """Webhook endpoint for short signals"""
-    return await _process_webhook(strategy_name, "short", request, background_tasks)
-
-@app.post("/{strategy_name}/close")
-async def webhook_close(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
-    """Webhook endpoint for close signals"""
-    return await _process_webhook(strategy_name, "close", request, background_tasks)
-
-async def _process_webhook(strategy_name: str, signal: str, request: Request, background_tasks: BackgroundTasks):
-    """Process webhook signal for a specific strategy"""
-    try:
-        client_ip = request.client.host if request.client else "unknown"
-        logger.info(f"🔥 WEBHOOK RECEIVED: strategy={strategy_name} signal={signal} from_ip={client_ip}")
+    <div class="container">
+        <h1>Multi-Strategy Trading Dashboard</h1>
         
-        # Get strategy
-        strategy = strategy_repo.get_strategy(strategy_name)
-        if not strategy:
-            available_strategies = strategy_repo.get_strategy_names()
-            error_response = {
-                "status": "error",
-                "error_type": "strategy_not_found", 
-                "message": f"Strategy '{strategy_name}' not found",
-                "available_strategies": available_strategies,
-                "help": "Create this strategy first or check the strategy name in your webhook URL"
-            }
-            logger.error(f"🔥 ERROR: strategy={strategy_name} not_found webhook_ignored")
-            return JSONResponse(status_code=404, content=error_response)
-        
-        logger.info(f"🔥 STRATEGY LOOKUP: found strategy={strategy.name} symbols={strategy.long_symbol}/{strategy.short_symbol} cash={strategy.cash_balance}")
-        
-        # Process signal in background to avoid webhook timeout
-        background_tasks.add_task(signal_processor.process_signal, signal, strategy)
-        
-        return {"status": "processing", "strategy": strategy_name, "signal": signal}
-        
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: strategy={strategy_name} webhook_processing_error={str(e)}")
-        return JSONResponse(
-            status_code=500, 
-            content={
-                "status": "error",
-                "error_type": "internal_error",
-                "message": str(e),
-                "help": "Check server logs for details"
-            }
-        )
+        <!-- Strategy Tabs -->
+        <div class="tabs-container">
+            <div class="tabs-header">
+                {% for strategy in strategies %}
+                <div class="tab-button" data-strategy="{{ strategy.get('name', 'unknown') }}" onclick="switchToStrategy('{{ strategy.get('name', 'unknown') }}')">
+                    <span class="tab-name">{{ strategy.get('display_name', strategy.get('name', 'Unknown')) }}</span>
+                </div>
+                {% endfor %}
+                <div class="tab-button tab-create" onclick="showCreateStrategy()">
+                    <span class="tab-name">+</span>
+                </div>
+            </div>
+        </div>
 
-# Strategy management endpoints
-@app.post("/strategies")
-async def create_strategy(
-    name: str = Form(...),
-    long_symbol: Optional[str] = Form(None),
-    short_symbol: Optional[str] = Form(None),
-    cash_balance: float = Form(0.0)
-):
-    """Create a new strategy"""
-    try:
-        # Clean up symbol inputs
-        long_symbol = long_symbol.strip() if long_symbol and long_symbol.strip() else None
-        short_symbol = short_symbol.strip() if short_symbol and short_symbol.strip() else None
-        
-        strategy = strategy_repo.create_strategy(name, long_symbol, short_symbol, cash_balance)
-        return {"status": "success", "strategy": strategy.to_dict()}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: create_strategy_error={str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        <!-- Empty State (when no strategies exist) -->
+        {% if not strategies %}
+        <div class="empty-state">
+            <h2>Welcome to Multi-Strategy Trading</h2>
+            <p>Create your first strategy to get started with automated trading.</p>
+            <button class="create-strategy-btn" onclick="showCreateStrategy()">Create Your First Strategy</button>
+        </div>
+        {% endif %}
 
-@app.get("/strategies")
-async def list_strategies():
-    """List all strategies"""
-    strategies = strategy_repo.get_all_strategies()
-    return {
-        "strategies": [strategy.to_dict() for strategy in strategies],
-        "count": len(strategies)
-    }
+        <!-- Create Strategy Form -->
+        <div id="create-strategy-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Create New Strategy</h3>
+                    <span class="modal-close" onclick="hideCreateStrategy()">&times;</span>
+                </div>
+                <form id="create-strategy-form">
+                    <div class="form-group">
+                        <label for="strategy-name">Strategy Name (URL-safe):</label>
+                        <input type="text" id="strategy-name" required 
+                               placeholder="e.g., momentum_strategy" 
+                               pattern="[a-zA-Z0-9_]{3,50}"
+                               title="Alphanumeric and underscores only, 3-50 characters">
+                        <small>Only letters, numbers, and underscores. Will be used in webhook URLs.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="strategy-long-symbol">Long Symbol (optional):</label>
+                        <input type="text" id="strategy-long-symbol" placeholder="e.g., MSTU">
+                    </div>
+                    <div class="form-group">
+                        <label for="strategy-short-symbol">Short Symbol (optional):</label>
+                        <input type="text" id="strategy-short-symbol" placeholder="e.g., MSTZ">
+                    </div>
+                    <div class="form-group">
+                        <label for="strategy-cash">Initial Cash Balance:</label>
+                        <input type="number" id="strategy-cash" step="0.01" value="0" min="0">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" onclick="hideCreateStrategy()">Cancel</button>
+                        <button type="submit">Create Strategy</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
-@app.get("/strategies/{name}")
-async def get_strategy(name: str):
-    """Get a specific strategy"""
-    strategy = strategy_repo.get_strategy(name)
-    if not strategy:
-        raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
-    return {"strategy": strategy.to_dict()}
+        <!-- Strategy Content Tabs -->
+        {% for strategy in strategies %}
+        <div class="strategy-content" id="strategy-{{ strategy.get('name', 'unknown') }}" style="display: none;">
+            
+            <!-- Webhook URLs Section -->
+            <div class="webhook-section">
+                <h2>Webhook URLs</h2>
+                <div class="webhook-card">
+                    <div class="webhook-url-group">
+                        <label>Long Signal URL:</label>
+                        <div class="url-input-group">
+                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/long" id="long-url-{{ strategy.get('name', 'unknown') }}">
+                            <button onclick="copyToClipboard('long-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                        </div>
+                    </div>
+                    <div class="webhook-url-group">
+                        <label>Short Signal URL:</label>
+                        <div class="url-input-group">
+                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/short" id="short-url-{{ strategy.get('name', 'unknown') }}">
+                            <button onclick="copyToClipboard('short-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                        </div>
+                    </div>
+                    <div class="webhook-url-group">
+                        <label>Close Signal URL:</label>
+                        <div class="url-input-group">
+                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/close" id="close-url-{{ strategy.get('name', 'unknown') }}">
+                            <button onclick="copyToClipboard('close-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-@app.put("/strategies/{name}")
-async def update_strategy(
-    name: str,
-    long_symbol: Optional[str] = Form(None),
-    short_symbol: Optional[str] = Form(None),
-    cash_balance: Optional[float] = Form(None)
-):
-    """Update a strategy"""
-    try:
-        # Clean up symbol inputs
-        if long_symbol is not None:
-            long_symbol = long_symbol.strip() if long_symbol.strip() else None
-        if short_symbol is not None:
-            short_symbol = short_symbol.strip() if short_symbol.strip() else None
-        
-        strategy = strategy_repo.update_strategy(name, long_symbol, short_symbol, cash_balance)
-        if not strategy:
-            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
-        return {"status": "success", "strategy": strategy.to_dict()}
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: update_strategy_error={str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+            <!-- Trading Symbols Section -->
+            <div class="symbols-section">
+                <h2>Trading Symbols</h2>
+                <div class="symbols-card">
+                    <div class="symbol-display">
+                        <div class="symbol-item">
+                            <span class="label">Long Symbol:</span>
+                            <span class="symbol-value">{{ strategy.get('long_symbol') or "Not set" }}</span>
+                        </div>
+                        <div class="symbol-item">
+                            <span class="label">Short Symbol:</span>
+                            <span class="symbol-value">{{ strategy.get('short_symbol') or "Not set" }}</span>
+                        </div>
+                    </div>
+                    
+                    <form class="update-form">
+                        <h3>Update Trading Symbols</h3>
+                        <div class="symbols-form-group">
+                            <div class="form-field">
+                                <label>Long Symbol:</label>
+                                <input type="text" class="long-symbol-input" 
+                                       value="{{ strategy.get('long_symbol') or '' }}" 
+                                       placeholder="e.g., MSTU">
+                            </div>
+                            <div class="form-field">
+                                <label>Short Symbol:</label>
+                                <input type="text" class="short-symbol-input" 
+                                       value="{{ strategy.get('short_symbol') or '' }}" 
+                                       placeholder="e.g., MSTZ">
+                            </div>
+                            <button type="button" onclick="updateStrategySymbols('{{ strategy.get('name', 'unknown') }}')">Update Symbols</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Manual Trading Section -->
+            <div class="manual-section">
+                <h2>Manual Trading</h2>
+                <div class="manual-card">
+                    <div class="manual-warning">
+                        <strong>Warning:</strong> These actions bypass cooldown periods and execute immediately for this strategy.
+                    </div>
+                    <div class="manual-controls">
+                        <button type="button" class="manual-btn force-long" onclick="forceStrategyLong('{{ strategy.get('name', 'unknown') }}')">Force Long</button>
+                        <button type="button" class="manual-btn force-short" onclick="forceStrategyShort('{{ strategy.get('name', 'unknown') }}')">Force Short</button>
+                        <button type="button" class="manual-btn force-close" onclick="forceStrategyClose('{{ strategy.get('name', 'unknown') }}')">Force Close</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Cash Balance Section -->
+            <div class="cash-section">
+                <h2>Cash Balance</h2>
+                <div class="cash-card">
+                    <div class="cash-amount">${{ "%.2f"|format(strategy.get('cash_balance', 0) or 0) }}</div>
+                    <div class="cash-details">
+                        <div>Strategy: {{ strategy.get('display_name', strategy.get('name', 'Unknown')) }}</div>
+                        <div>Last updated: 
+                            {% if strategy.get('cash_info') and strategy.cash_info.get('staleness') %}
+                                {% set staleness = strategy.cash_info.staleness %}
+                                {% if staleness.get('days', 0) > 0 %}
+                                    {{ staleness.days }} days
+                                {% endif %}
+                                {% if staleness.get('hours', 0) > 0 %}
+                                    {{ staleness.hours }} hours
+                                {% endif %}
+                                {{ staleness.get('minutes', 0) }} minutes ago
+                            {% else %}
+                                Just now
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <form class="update-form">
+                        <h3>Update Cash Balance</h3>
+                        <div class="form-group">
+                            <input type="number" class="cash-amount-input" step="0.01" required 
+                                   placeholder="Enter new balance">
+                            <button type="button" onclick="updateStrategyCash('{{ strategy.get('name', 'unknown') }}')">Update</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Cooldown Section -->
+            <div class="cooldown-section">
+                <h2>Cooldown Status</h2>
+                <div class="cooldown-card">
+                    {% set cooldown = strategy.get('cooldown', {}) %}
+                    {% if cooldown.get('active') %}
+                        <div class="cooldown-active">
+                            <div class="cooldown-label">Cooldown Active</div>
+                            <div class="cooldown-timer">
+                                Time remaining: {{ cooldown.get('remaining', {}).get('hours', 0) }}h {{ cooldown.get('remaining', {}).get('minutes', 0) }}m
+                            </div>
+                            <div class="cooldown-end">
+                                Ends at: {{ cooldown.get('end_time', 'Unknown') }}
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="cooldown-inactive">
+                            <div class="cooldown-label">Cooldown Inactive</div>
+                            <div>Ready to process signals normally</div>
+                        </div>
+                    {% endif %}
+                    
+                    <div class="cooldown-controls">
+                        <button type="button" class="cooldown-btn" onclick="startStrategyCooldown('{{ strategy.get('name', 'unknown') }}')">Start Cooldown</button>
+                        <button type="button" class="cooldown-btn" onclick="stopStrategyCooldown('{{ strategy.get('name', 'unknown') }}')">Stop Cooldown</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- API Call History Section -->
+            <div class="api-section">
+                <h2>API Call History</h2>
+                <div class="api-calls">
+                    {% if strategy.get('api_calls') and strategy.api_calls|length > 0 %}
+                        {% for call in strategy.api_calls|reverse %}
+                            <div class="api-call">
+                                <div class="api-call-header">
+                                    <div class="timestamp">{{ call.get('timestamp', 'Unknown') }}</div>
+                                    <div class="status {{ call.get('response', {}).get('status', 'unknown') }}">
+                                        {{ call.get('response', {}).get('status', 'Unknown') }}
+                                    </div>
+                                </div>
+                                <div class="api-call-content">
+                                    <div class="request">
+                                        <h4>Request</h4>
+                                        <pre>{{ call.get('request', {}) | tojson(indent=2) }}</pre>
+                                    </div>
+                                    <div class="response">
+                                        <h4>Response</h4>
+                                        <pre>{{ call.get('response', {}) | tojson(indent=2) }}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-api-calls">No API calls recorded yet for this strategy</div>
+                    {% endif %}
+                </div>
+            </div>
 
-@app.delete("/strategies/{name}")
-async def delete_strategy(name: str):
-    """Delete a strategy"""
-    success = strategy_repo.delete_strategy(name)
-    if not success:
-        raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
-    return {"status": "success", "message": f"Strategy '{name}' deleted"}
+            <!-- Strategy Actions -->
+            <div class="strategy-actions">
+                <button type="button" class="delete-strategy-btn" onclick="deleteStrategy('{{ strategy.get('name', 'unknown') }}')">Delete Strategy</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
 
-# Strategy-specific operations
-@app.post("/strategies/{name}/update-symbols")
-async def update_strategy_symbols(
-    name: str,
-    long_symbol: str = Form(...),
-    short_symbol: str = Form(...)
-):
-    """Update symbols for a specific strategy"""
-    try:
-        # Clean up inputs
-        long_symbol = long_symbol.strip() if long_symbol.strip() else None
-        short_symbol = short_symbol.strip() if short_symbol.strip() else None
-        
-        strategy = strategy_repo.update_strategy(name, long_symbol=long_symbol, short_symbol=short_symbol)
-        if not strategy:
-            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
-        return {"status": "success", "strategy": strategy.to_dict()}
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: update_symbols_error={str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/strategies/{name}/update-cash")
-async def update_strategy_cash(name: str, cash_amount: float = Form(...)):
-    """Update cash balance for a specific strategy"""
-    try:
-        strategy = strategy_repo.get_strategy(name)
-        if not strategy:
-            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
-        
-        success = cash_manager.update_balance_manual(cash_amount, strategy)
-        if not success:
-            raise HTTPException(status_code=400, detail="Invalid cash amount")
-        
-        return {"status": "success", "strategy": strategy.to_dict()}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: update_cash_error={str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/strategies/{name}/start-cooldown")
-async def start_strategy_cooldown(name: str):
-    """Start cooldown for a specific strategy"""
-    try:
-        strategy = strategy_repo.get_strategy(name)
-        if not strategy:
-            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
-        
-        cooldown_manager.start_cooldown(strategy)
-        return {"status": "success", "strategy": strategy.to_dict()}
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: start_cooldown_error={str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/strategies/{name}/stop-cooldown")
-async def stop_strategy_cooldown(name: str):
-    """Stop cooldown for a specific strategy"""
-    try:
-        strategy = strategy_repo.get_strategy(name)
-        if not strategy:
-            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
-        
-        cooldown_manager.stop_cooldown(strategy)
-        return {"status": "success", "strategy": strategy.to_dict()}
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: stop_cooldown_error={str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/strategies/{name}/force-long")
-async def force_strategy_long(name: str, background_tasks: BackgroundTasks):
-    """Force long position for a specific strategy"""
-    try:
-        strategy = strategy_repo.get_strategy(name)
-        if not strategy:
-            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
-        
-        if strategy.is_processing:
-            return {"status": "error", "message": "Strategy is already processing a signal"}
-        
-        background_tasks.add_task(signal_processor.force_long, strategy)
-        return {"status": "success", "message": f"Force long initiated for strategy '{name}'"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: force_long_error={str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/strategies/{name}/force-short")
-async def force_strategy_short(name: str, background_tasks: BackgroundTasks):
-    """Force short position for a specific strategy"""
-    try:
-        strategy = strategy_repo.get_strategy(name)
-        if not strategy:
-            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
-        
-        if strategy.is_processing:
-            return {"status": "error", "message": "Strategy is already processing a signal"}
-        
-        background_tasks.add_task(signal_processor.force_short, strategy)
-        return {"status": "success", "message": f"Force short initiated for strategy '{name}'"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: force_short_error={str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/strategies/{name}/force-close")
-async def force_strategy_close(name: str, background_tasks: BackgroundTasks):
-    """Force close all positions for a specific strategy"""
-    try:
-        strategy = strategy_repo.get_strategy(name)
-        if not strategy:
-            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
-        
-        if strategy.is_processing:
-            return {"status": "error", "message": "Strategy is already processing a signal"}
-        
-        background_tasks.add_task(signal_processor.force_close, strategy)
-        return {"status": "success", "message": f"Force close initiated for strategy '{name}'"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: force_close_error={str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Dashboard endpoints
-@app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    """Multi-strategy dashboard"""
-    strategies = strategy_repo.get_all_strategies()
-    return templates.TemplateResponse(
-        "index.html", 
-        {
-            "request": request,
-            "strategies": [strategy.to_dict() for strategy in strategies]
-        }
-    )
-
-# Legacy compatibility and utility endpoints
-@app.get("/status")
-async def status():
-    """Get system status"""
-    strategies = strategy_repo.get_all_strategies()
-    return {
-        "status": "ok",
-        "system": "multi-strategy",
-        "strategies": len(strategies),
-        "strategy_names": [s.name for s in strategies]
-    }
-
-@app.post("/debug")
-async def debug_log(request: Request):
-    """Debug endpoint to log JavaScript activity"""
-    try:
-        payload = await request.json()
-        message = payload.get("message", "No message")
-        logger.info(f"🔥 JAVASCRIPT DEBUG: {message}")
-        return {"status": "logged", "message": message}
-    except Exception as e:
-        logger.info(f"🔥 JAVASCRIPT DEBUG (text): {await request.body()}")
-        return {"status": "logged"}
-
-@app.get("/debug-test")
-async def debug_test():
-    """Simple debug test endpoint"""
-    logger.info("🔥 DEBUG TEST ENDPOINT CALLED - JavaScript is working!")
-    return {"status": "success", "message": "Debug test successful"}
-
-@app.post("/debug/clear-strategies")
-async def debug_clear_strategies():
-    """Debug endpoint to clear all strategies (use with caution!)"""
-    try:
-        with strategy_repo._storage_lock:
-            count = len(strategy_repo.strategies)
-            strategy_repo.strategies.clear()
-            logger.info(f"🔥 DEBUG: Cleared {count} strategies from repository")
-        return {"status": "success", "message": f"Cleared {count} strategies", "count": count}
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: debug_clear_strategies_error={str(e)}")
-        return {"status": "error", "message": str(e)}
-
-@app.post("/debug/fix-strategies") 
-async def debug_fix_strategies():
-    """Debug endpoint to fix existing strategies missing display_name"""
-    try:
-        fixed_count = 0
-        with strategy_repo._storage_lock:
-            for strategy in strategy_repo.strategies.values():
-                if not hasattr(strategy, 'display_name'):
-                    strategy.display_name = strategy.name
-                    fixed_count += 1
-                    logger.info(f"🔥 DEBUG: Fixed display_name for strategy {strategy.name}")
-        
-        return {"status": "success", "message": f"Fixed {fixed_count} strategies", "fixed_count": fixed_count}
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: debug_fix_strategies_error={str(e)}")
-        return {"status": "error", "message": str(e)}
-
-@app.get("/debug/strategies")
-async def debug_strategies():
-    """Debug endpoint to inspect strategy objects"""
-    try:
-        with strategy_repo._storage_lock:
-            debug_info = []
-            for name, strategy in strategy_repo.strategies.items():
-                debug_info.append({
-                    "name": name,
-                    "has_display_name": hasattr(strategy, 'display_name'),
-                    "display_name": getattr(strategy, 'display_name', 'MISSING'),
-                    "attributes": list(dir(strategy))
-                })
-        return {"status": "success", "strategies": debug_info}
-    except Exception as e:
-        logger.exception(f"🔥 ERROR: debug_strategies_error={str(e)}")
-        return {"status": "error", "message": str(e)}
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", DASHBOARD_PORT))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
+    <script src="/static/dashboard.js"></script>
+    <script>
+        // Initialize the first tab or show empty state
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if strategies %}
+                {% set first_strategy = strategies[0] %}
+                switchToStrategy('{{ first_strategy.get('name', 'unknown') }}');
+            {% endif %}
+        });
+    </script>
+</body>
+</html>
