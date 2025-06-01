@@ -157,7 +157,7 @@ class Strategy:
         
         return {
             "active": True,
-            "end_time": self.cooldown_end_time.isoformat(),
+            "end_time": self.cooldown_end_time.isoformat() + 'Z',
             "remaining": {
                 "hours": hours,
                 "minutes": minutes
