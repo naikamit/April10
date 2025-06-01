@@ -247,16 +247,42 @@ function stopStrategyCooldown(strategyName) {
     });
 }
 
+// Helper function to get strategy symbols
+function getStrategySymbols(strategyName) {
+    const strategyDiv = document.getElementById(`strategy-${strategyName}`);
+    const symbolValues = strategyDiv.querySelectorAll('.symbol-value');
+    const longSymbol = symbolValues[0] ? symbolValues[0].textContent.trim() : 'Not set';
+    const shortSymbol = symbolValues[1] ? symbolValues[1].textContent.trim() : 'Not set';
+    
+    return {
+        long: longSymbol !== 'Not set' ? longSymbol : null,
+        short: shortSymbol !== 'Not set' ? shortSymbol : null
+    };
+}
+
 // Manual Trading Functions
 function forceStrategyLong(strategyName) {
-    const confirmed = confirm(
-        `Are you sure you want to force a LONG position for ${strategyName}?\n\n` +
-        'This will:\n' +
-        '• Close any short positions\n' +
-        '• Buy the long symbol\n' +
-        '• Bypass cooldown periods\n\n' +
-        'Click OK to proceed.'
-    );
+    const symbols = getStrategySymbols(strategyName);
+    
+    let message = `Are you sure you want to force a LONG position for ${strategyName}?\n\n`;
+    message += 'This will:\n';
+    
+    if (symbols.short) {
+        message += `• Close any ${symbols.short} positions\n`;
+    } else {
+        message += '• Close any short positions\n';
+    }
+    
+    if (symbols.long) {
+        message += `• Buy ${symbols.long}\n`;
+    } else {
+        message += '• Buy the long symbol\n';
+    }
+    
+    message += '• Bypass cooldown periods\n\n';
+    message += 'Click OK to proceed.';
+    
+    const confirmed = confirm(message);
     
     if (!confirmed) {
         return;
@@ -290,14 +316,27 @@ function forceStrategyLong(strategyName) {
 }
 
 function forceStrategyShort(strategyName) {
-    const confirmed = confirm(
-        `Are you sure you want to force a SHORT position for ${strategyName}?\n\n` +
-        'This will:\n' +
-        '• Close any long positions\n' +
-        '• Buy the short symbol\n' +
-        '• Bypass cooldown periods\n\n' +
-        'Click OK to proceed.'
-    );
+    const symbols = getStrategySymbols(strategyName);
+    
+    let message = `Are you sure you want to force a SHORT position for ${strategyName}?\n\n`;
+    message += 'This will:\n';
+    
+    if (symbols.long) {
+        message += `• Close any ${symbols.long} positions\n`;
+    } else {
+        message += '• Close any long positions\n';
+    }
+    
+    if (symbols.short) {
+        message += `• Buy ${symbols.short}\n`;
+    } else {
+        message += '• Buy the short symbol\n';
+    }
+    
+    message += '• Bypass cooldown periods\n\n';
+    message += 'Click OK to proceed.';
+    
+    const confirmed = confirm(message);
     
     if (!confirmed) {
         return;
@@ -331,14 +370,27 @@ function forceStrategyShort(strategyName) {
 }
 
 function forceStrategyClose(strategyName) {
-    const confirmed = confirm(
-        `Are you sure you want to FORCE CLOSE ALL positions for ${strategyName}?\n\n` +
-        'This will:\n' +
-        '• Close ALL long positions\n' +
-        '• Close ALL short positions\n' +
-        '• Bypass cooldown periods\n\n' +
-        'This action affects BOTH symbols for this strategy!'
-    );
+    const symbols = getStrategySymbols(strategyName);
+    
+    let message = `Are you sure you want to FORCE CLOSE ALL positions for ${strategyName}?\n\n`;
+    message += 'This will:\n';
+    
+    if (symbols.long) {
+        message += `• Close ALL ${symbols.long} positions\n`;
+    } else {
+        message += '• Close ALL long positions\n';
+    }
+    
+    if (symbols.short) {
+        message += `• Close ALL ${symbols.short} positions\n`;
+    } else {
+        message += '• Close ALL short positions\n';
+    }
+    
+    message += '• Bypass cooldown periods\n\n';
+    message += 'This action affects BOTH symbols for this strategy!';
+    
+    const confirmed = confirm(message);
     
     if (!confirmed) {
         return;
