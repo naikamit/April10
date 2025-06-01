@@ -185,6 +185,8 @@ function updateStrategyCash(strategyName) {
 }
 
 // Cooldown Management
+let cooldownTimers = {}; // Store timers for each strategy
+
 function startStrategyCooldown(strategyName) {
     fetch(`/strategies/${strategyName}/start-cooldown`, {
         method: 'POST',
@@ -195,19 +197,8 @@ function startStrategyCooldown(strategyName) {
     .then(response => response.json())
     .then(result => {
         if (result.status === 'success' && result.strategy.cooldown.active) {
-            // Update the cooldown display
-            const strategyDiv = document.getElementById(`strategy-${strategyName}`);
-            const statusDiv = strategyDiv.querySelector('.cooldown-card > div:first-child');
-            if (statusDiv) {
-                statusDiv.className = 'cooldown-active';
-                statusDiv.innerHTML = 
-                    '<div class="cooldown-label">Cooldown Active</div>' +
-                    '<div class="cooldown-timer">Time remaining: ' + 
-                    result.strategy.cooldown.remaining.hours + 'h ' + 
-                    result.strategy.cooldown.remaining.minutes + 'm</div>' +
-                    '<div class="cooldown-end">Ends at: ' + 
-                    new Date(result.strategy.cooldown.end_time).toLocaleString() + '</div>';
-            }
+            // Update the cooldown display immediately
+            updateCooldownDisplay(strategyName, result.strategy.cooldown);
             showToast(`Cooldown started for ${strategyName}`, 'success');
         } else {
             showToast(`Error: ${result.detail || 'Failed to start cooldown'}`, 'error');
@@ -228,15 +219,8 @@ function stopStrategyCooldown(strategyName) {
     .then(response => response.json())
     .then(result => {
         if (result.status === 'success') {
-            // Update the cooldown display
-            const strategyDiv = document.getElementById(`strategy-${strategyName}`);
-            const statusDiv = strategyDiv.querySelector('.cooldown-card > div:first-child');
-            if (statusDiv) {
-                statusDiv.className = 'cooldown-inactive';
-                statusDiv.innerHTML = 
-                    '<div class="cooldown-label">Cooldown Inactive</div>' +
-                    '<div>Ready to process signals normally</div>';
-            }
+            // Update the cooldown display immediately
+            updateCooldownDisplay(strategyName, { active: false });
             showToast(`Cooldown stopped for ${strategyName}`, 'success');
         } else {
             showToast(`Error: ${result.detail || 'Failed to stop cooldown'}`, 'error');
@@ -247,7 +231,94 @@ function stopStrategyCooldown(strategyName) {
     });
 }
 
-// Helper function to get strategy symbols
+function updateCooldownDisplay(strategyName, cooldownData) {
+    const strategyDiv = document.getElementById(`strategy-${strategyName}`);
+    const statusDiv = strategyDiv.querySelector('.cooldown-card > div:first-child');
+    
+    // Clear existing timer for this strategy
+    if (cooldownTimers[strategyName]) {
+        clearInterval(cooldownTimers[strategyName]);
+        delete cooldownTimers[strategyName];
+    }
+    
+    if (cooldownData.active && cooldownData.end_time) {
+        // Show active cooldown
+        statusDiv.className = 'cooldown-active';
+        
+        // Calculate initial time remaining
+        const endTime = new Date(cooldownData.end_time);
+        
+        // Create timer element
+        const timerElement = document.createElement('div');
+        timerElement.className = 'cooldown-timer';
+        
+        // Update function for the countdown
+        function updateTimer() {
+            const now = new Date();
+            const remaining = endTime - now;
+            
+            if (remaining <= 0) {
+                // Cooldown has expired
+                clearInterval(cooldownTimers[strategyName]);
+                delete cooldownTimers[strategyName];
+                updateCooldownDisplay(strategyName, { active: false });
+                return;
+            }
+            
+            const hours = Math.floor(remaining / (1000 * 60 * 60));
+            const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+            
+            timerElement.textContent = `Time remaining: ${hours}h ${minutes}m ${seconds}s`;
+        }
+        
+        statusDiv.innerHTML = 
+            '<div class="cooldown-label">Cooldown Active</div>' +
+            '<div class="cooldown-end">Ends at: ' + endTime.toLocaleString() + '</div>';
+        
+        statusDiv.appendChild(timerElement);
+        
+        // Start the countdown timer
+        updateTimer(); // Update immediately
+        cooldownTimers[strategyName] = setInterval(updateTimer, 1000);
+        
+    } else {
+        // Show inactive cooldown
+        statusDiv.className = 'cooldown-inactive';
+        statusDiv.innerHTML = 
+            '<div class="cooldown-label">Cooldown Inactive</div>' +
+            '<div>Ready to process signals normally</div>';
+    }
+}
+
+// Initialize cooldown timers for existing active cooldowns
+function initializeCooldownTimers() {
+    // Find all strategy divs and check for active cooldowns
+    const strategyDivs = document.querySelectorAll('.strategy-content');
+    
+    strategyDivs.forEach(strategyDiv => {
+        const strategyName = strategyDiv.id.replace('strategy-', '');
+        const cooldownStatus = strategyDiv.querySelector('.cooldown-active');
+        
+        if (cooldownStatus) {
+            // Check if there's an end time in the DOM
+            const endTimeElement = strategyDiv.querySelector('.cooldown-end');
+            if (endTimeElement) {
+                const endTimeText = endTimeElement.textContent;
+                const endTimeMatch = endTimeText.match(/Ends at: (.+)/);
+                
+                if (endTimeMatch) {
+                    const endTime = new Date(endTimeMatch[1]);
+                    // Start timer for this strategy
+                    updateCooldownDisplay(strategyName, {
+                        active: true,
+                        end_time: endTime.toISOString()
+                    });
+                }
+            }
+        }
+    });
+}
 function getStrategySymbols(strategyName) {
     const strategyDiv = document.getElementById(`strategy-${strategyName}`);
     const symbolValues = strategyDiv.querySelectorAll('.symbol-value');
@@ -261,6 +332,9 @@ function getStrategySymbols(strategyName) {
 }
 
 // Manual Trading Functions
+function forceStrategyLong(strategyName) {
+
+// Helper function to get strategy symbols
 function forceStrategyLong(strategyName) {
     const symbols = getStrategySymbols(strategyName);
     
