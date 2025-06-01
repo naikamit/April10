@@ -1,6 +1,7 @@
 // static/dashboard.js - Multi-Strategy Dashboard JavaScript functions
 
 let currentStrategy = null;
+let cooldownTimers = {}; // Store timers for each strategy
 
 // Toast notification system
 function showToast(message, type = 'info') {
@@ -185,8 +186,6 @@ function updateStrategyCash(strategyName) {
 }
 
 // Cooldown Management
-let cooldownTimers = {}; // Store timers for each strategy
-
 function startStrategyCooldown(strategyName) {
     fetch(`/strategies/${strategyName}/start-cooldown`, {
         method: 'POST',
@@ -319,6 +318,8 @@ function initializeCooldownTimers() {
         }
     });
 }
+
+// Helper function to get strategy symbols
 function getStrategySymbols(strategyName) {
     const strategyDiv = document.getElementById(`strategy-${strategyName}`);
     const symbolValues = strategyDiv.querySelectorAll('.symbol-value');
@@ -332,9 +333,6 @@ function getStrategySymbols(strategyName) {
 }
 
 // Manual Trading Functions
-function forceStrategyLong(strategyName) {
-
-// Helper function to get strategy symbols
 function forceStrategyLong(strategyName) {
     const symbols = getStrategySymbols(strategyName);
     
