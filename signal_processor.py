@@ -1,250 +1,806 @@
-# signal_processor.py - Signal processing logic (strategy-aware)
-import logging
-import asyncio
-from typing import Dict, Any, Optional
+/* static/style.css - Multi-Strategy Dashboard styles (Dark Mode) */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
 
-from config import BUY_RETRY_REDUCTION_PERCENT, MAX_BUY_RETRIES
-from strategy import Strategy
-from api_client import SignalStackClient
-from cash_manager import CashManager
-from cooldown_manager import CooldownManager
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    color: #e4e4e7;
+    background-color: #0f172a;
+    padding: 20px;
+}
 
-logger = logging.getLogger(__name__)
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
 
-# Add configuration for close position retries
-MAX_CLOSE_RETRIES = 10  # Maximum retries for close position operations
+/* Toast Notifications */
+#toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
 
-class SignalProcessor:
-    def __init__(self):
-        self.api_client = SignalStackClient()
-        self.cash_manager = CashManager()
-        self.cooldown_manager = CooldownManager()
+.toast {
+    background-color: #334155;
+    color: #e4e4e7;
+    padding: 12px 20px;
+    border-radius: 8px;
+    border-left: 4px solid #60a5fa;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transform: translateX(400px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    max-width: 350px;
+    word-wrap: break-word;
+}
 
-    async def process_signal(self, signal_type: str, strategy: Strategy) -> Dict[str, Any]:
-        """
-        Process a signal for a specific strategy
-        
-        Args:
-            signal_type: Type of signal ('long', 'short', 'close')
-            strategy: Strategy instance to process signal for
-            
-        Returns:
-            Dictionary with processing result
-        """
-        logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} signal={signal_type} starting_execution")
-        
-        # Check if strategy is already processing a signal
-        if strategy.is_processing:
-            logger.warning(f"🔥 SIGNAL IGNORED: strategy={strategy.name} signal={signal_type} reason=already_processing")
-            return {"status": "ignored", "reason": "Strategy is already processing a signal"}
-        
-        # Set processing flag for this strategy
-        strategy.is_processing = True
-        
-        try:
-            # Check cooldown state
-            in_cooldown = self.cooldown_manager.is_in_cooldown(strategy)
-            logger.info(f"🔥 COOLDOWN CHECK: strategy={strategy.name} status={'active' if in_cooldown else 'inactive'} ready_to_process={not in_cooldown}")
-            
-            if not in_cooldown:
-                # Start the cooldown period
-                self.cooldown_manager.start_cooldown(strategy)
-                
-                # Process normal signal (not in cooldown)
-                if signal_type == "long":
-                    await self._process_long_signal(strategy)
-                elif signal_type == "short":
-                    await self._process_short_signal(strategy)
-                elif signal_type == "close":
-                    await self._close_all_positions(strategy)
-                else:
-                    logger.error(f"🔥 ERROR: strategy={strategy.name} unknown_signal_type={signal_type}")
-                    strategy.is_processing = False
-                    return {"status": "error", "reason": f"Unknown signal type: {signal_type}"}
-            else:
-                # In cooldown period, do nothing
-                logger.info(f"🔥 SIGNAL IGNORED: strategy={strategy.name} signal={signal_type} reason=in_cooldown")
-                
-            strategy.is_processing = False
-            logger.info(f"🔥 SIGNAL COMPLETE: strategy={strategy.name} signal={signal_type} result=success")
-            return {"status": "success"}
-            
-        except Exception as e:
-            logger.exception(f"🔥 ERROR: strategy={strategy.name} signal_processing_error={str(e)}")
-            strategy.is_processing = False
-            return {"status": "error", "reason": str(e)}
+.toast.show {
+    transform: translateX(0);
+    opacity: 1;
+}
 
-    async def _process_long_signal(self, strategy: Strategy):
-        """
-        Process a long signal for a strategy:
-        1. Close short positions
-        2. Buy long symbol (if not null)
-        """
-        logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} signal=long starting_execution")
-        
-        # 1. Close short positions
-        if strategy.short_symbol:
-            await self._close_symbol_position(strategy.short_symbol, strategy)
-        else:
-            logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} short_symbol=null skipping_close")
-        
-        # 2. Buy long symbol if not null
-        if strategy.long_symbol:
-            await self._buy_symbol(strategy.long_symbol, strategy)
-            # Pause for 3 seconds as specified in requirements
-            await asyncio.sleep(3)
-        else:
-            logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} long_symbol=null skipping_buy")
+.toast-success {
+    border-left-color: #34d399;
+    background-color: #065f46;
+}
 
-    async def _process_short_signal(self, strategy: Strategy):
-        """
-        Process a short signal for a strategy:
-        1. Close long positions
-        2. Buy short symbol (if not null)
-        """
-        logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} signal=short starting_execution")
-        
-        # 1. Close long positions
-        if strategy.long_symbol:
-            await self._close_symbol_position(strategy.long_symbol, strategy)
-        else:
-            logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} long_symbol=null skipping_close")
-        
-        # 2. Buy short symbol if not null
-        if strategy.short_symbol:
-            await self._buy_symbol(strategy.short_symbol, strategy)
-            # Pause for 3 seconds as specified in requirements
-            await asyncio.sleep(3)
-        else:
-            logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} short_symbol=null skipping_buy")
+.toast-error {
+    border-left-color: #f87171;
+    background-color: #7f1d1d;
+}
 
-    async def _close_all_positions(self, strategy: Strategy):
-        """
-        Close all positions for both symbols in a strategy
-        """
-        logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} signal=close closing_all_positions")
-        
-        close_tasks = []
-        
-        # Close long positions if symbol is not null
-        if strategy.long_symbol:
-            close_tasks.append(self._close_symbol_position(strategy.long_symbol, strategy))
-        
-        # Close short positions if symbol is not null
-        if strategy.short_symbol:
-            close_tasks.append(self._close_symbol_position(strategy.short_symbol, strategy))
-        
-        # Wait for all close tasks to complete
-        if close_tasks:
-            await asyncio.gather(*close_tasks)
-        else:
-            logger.info(f"🔥 SIGNAL PROCESSING: strategy={strategy.name} no_symbols_to_close")
+.toast-info {
+    border-left-color: #60a5fa;
+    background-color: #1e3a8a;
+}
 
-    async def _buy_symbol(self, symbol: str, strategy: Strategy):
-        """
-        Buy a symbol with retry logic for a strategy:
-        1. Buy 1 share to get current price
-        2. Calculate max shares based on remaining cash
-        3. Buy max shares with retry logic
-        """
-        logger.info(f"🔥 BUYING SHARES: strategy={strategy.name} symbol={symbol} attempting_purchase")
-        
-        # 1. Buy 1 share to get current price
-        success, price, response = await self.api_client.buy_symbol(symbol, 1, strategy)
-        
-        if not success or price is None:
-            logger.error(f"🔥 ERROR: strategy={strategy.name} symbol={symbol} failed_to_get_price")
-            return
-        
-        # Update cash balance after the 1-share purchase
-        self.cash_manager.update_balance_from_buy(price, 1, strategy)
-        
-        # 2. Calculate max shares based on remaining cash balance and price
-        max_shares = self.cash_manager.get_max_shares(price, strategy)
-        
-        if max_shares <= 0:
-            logger.info(f"🔥 BUYING COMPLETE: strategy={strategy.name} symbol={symbol} bought_1_share only_enough_cash_for_1")
-            return
-        
-        # 3. Try to buy additional shares with retry logic
-        logger.info(f"🔥 BUYING SHARES: strategy={strategy.name} symbol={symbol} max_additional_shares={max_shares} attempting_purchase")
-        
-        retries = 0
-        shares_to_buy = max_shares
-        
-        while retries < MAX_BUY_RETRIES:
-            success, final_price, response = await self.api_client.buy_symbol(symbol, shares_to_buy, strategy)
-            
-            if success:
-                logger.info(f"🔥 API RESPONSE: strategy={strategy.name} action=buy symbol={symbol} price={final_price} quantity={shares_to_buy}")
-                # Reduce cash balance by the amount spent
-                if final_price:
-                    self.cash_manager.update_balance_from_buy(final_price, shares_to_buy, strategy)
-                logger.info(f"🔥 BUYING COMPLETE: strategy={strategy.name} symbol={symbol} total_shares={1 + shares_to_buy}")
-                return
-            
-            # Calculate reduced shares for retry (ensure at least 1 fewer share)
-            reduction = max(1, int(shares_to_buy * BUY_RETRY_REDUCTION_PERCENT / 100))
-            shares_to_buy = max(1, shares_to_buy - reduction)
-            
-            logger.info(f"🔥 BUY RETRY: strategy={strategy.name} symbol={symbol} shares={shares_to_buy} retry={retries+1}/{MAX_BUY_RETRIES}")
-            retries += 1
-            await asyncio.sleep(3)  # Pause before retry
-        
-        logger.error(f"🔥 ERROR: strategy={strategy.name} symbol={symbol} max_buy_retries_exceeded={MAX_BUY_RETRIES} bought_1_share_only")
-        logger.info(f"🔥 BUYING COMPLETE: strategy={strategy.name} symbol={symbol} total_shares=1 additional_buys_failed")
+h1 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: #f1f5f9;
+}
 
-    async def _close_symbol_position(self, symbol: str, strategy: Strategy):
-        """
-        Close positions for a symbol with bounded retry logic
-        """
-        logger.info(f"🔥 CLOSING POSITIONS: strategy={strategy.name} symbol={symbol} calling_api")
-        
-        retries = 0
-        while retries < MAX_CLOSE_RETRIES:
-            success, price, quantity, response = await self.api_client.close_position(symbol, strategy)
-            
-            if success:
-                logger.info(f"🔥 CLOSE COMPLETE: strategy={strategy.name} symbol={symbol} success=true")
-                
-                # Update cash balance if position was actually closed (not just "accepted" due to no positions)
-                if price is not None and quantity is not None:
-                    self.cash_manager.update_balance_from_close(price, quantity, strategy)
-                
-                return
-            
-            retries += 1
-            if retries < MAX_CLOSE_RETRIES:
-                logger.warning(f"🔥 CLOSE RETRY: strategy={strategy.name} symbol={symbol} retry={retries}/{MAX_CLOSE_RETRIES} retrying_in_3s")
-                await asyncio.sleep(3)  # Pause before retry
-            else:
-                logger.error(f"🔥 ERROR: strategy={strategy.name} symbol={symbol} max_close_retries_exceeded={MAX_CLOSE_RETRIES}")
-                break
+h2 {
+    color: #60a5fa;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #374151;
+    padding-bottom: 5px;
+}
 
-    # Force methods for manual trading (bypass cooldown)
-    async def force_long(self, strategy: Strategy):
-        """Force a long position for a strategy (bypasses cooldown)"""
-        logger.info(f"🔥 MANUAL FORCE: strategy={strategy.name} action=force_long")
-        strategy.is_processing = True
-        try:
-            await self._process_long_signal(strategy)
-        finally:
-            strategy.is_processing = False
+/* Tabs Styling */
+.tabs-container {
+    margin-bottom: 30px;
+}
 
-    async def force_short(self, strategy: Strategy):
-        """Force a short position for a strategy (bypasses cooldown)"""
-        logger.info(f"🔥 MANUAL FORCE: strategy={strategy.name} action=force_short")
-        strategy.is_processing = True
-        try:
-            await self._process_short_signal(strategy)
-        finally:
-            strategy.is_processing = False
+.tabs-header {
+    display: flex;
+    gap: 2px;
+    background-color: #1e293b;
+    border-radius: 8px 8px 0 0;
+    padding: 10px 10px 0 10px;
+    overflow-x: auto;
+}
 
-    async def force_close(self, strategy: Strategy):
-        """Force close all positions for a strategy (bypasses cooldown)"""
-        logger.info(f"🔥 MANUAL FORCE: strategy={strategy.name} action=force_close")
-        strategy.is_processing = True
-        try:
-            await self._close_all_positions(strategy)
-        finally:
-            strategy.is_processing = False
+.tab-button {
+    background-color: #334155;
+    color: #94a3b8;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+    min-width: 120px;
+    text-align: center;
+    border-bottom: 3px solid transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tab-name {
+    display: block;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.tab-button:hover {
+    background-color: #475569;
+    color: #e4e4e7;
+}
+
+.tab-button.active {
+    background-color: #60a5fa;
+    color: #000;
+    border-bottom-color: #3b82f6;
+}
+
+.tab-create {
+    background-color: #059669 !important;
+    color: white !important;
+    font-weight: bold;
+    font-size: 18px;
+    min-width: 50px;
+}
+
+.tab-create:hover {
+    background-color: #047857 !important;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    background-color: #1e293b;
+    border-radius: 8px;
+    border: 2px dashed #374151;
+}
+
+.empty-state h2 {
+    color: #f1f5f9;
+    margin-bottom: 15px;
+    border: none;
+}
+
+.empty-state p {
+    color: #94a3b8;
+    margin-bottom: 30px;
+    font-size: 1.1rem;
+}
+
+.create-strategy-btn {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    font-weight: 500;
+    transition: background-color 0.3s;
+}
+
+.create-strategy-btn:hover {
+    background-color: #2563eb;
+}
+
+/* Modal Styling */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: #1e293b;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #374151;
+}
+
+.modal-header h3 {
+    color: #f1f5f9;
+    margin: 0;
+}
+
+.modal-close {
+    font-size: 28px;
+    font-weight: bold;
+    color: #94a3b8;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: #e4e4e7;
+}
+
+/* Modal Form Styling */
+.modal form {
+    padding: 20px;
+}
+
+.modal .form-group {
+    margin-bottom: 20px;
+}
+
+.modal .form-group label {
+    display: block;
+    color: #cbd5e1;
+    font-weight: 500;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+}
+
+.modal .form-group input {
+    width: 100%;
+    padding: 12px;
+    background-color: #475569;
+    border: 1px solid #64748b;
+    border-radius: 6px;
+    color: #e4e4e7;
+    font-size: 0.95rem;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.modal .form-group input::placeholder {
+    color: #94a3b8;
+}
+
+.modal .form-group input:focus {
+    outline: none;
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+}
+
+.modal .form-group small {
+    display: block;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    margin-top: 5px;
+    line-height: 1.3;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #374151;
+}
+
+.form-actions button {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: background-color 0.3s, transform 0.1s;
+}
+
+.form-actions button:hover {
+    transform: translateY(-1px);
+}
+
+.form-actions button:active {
+    transform: translateY(0);
+}
+
+.form-actions button[type="button"] {
+    background-color: #64748b;
+    color: #e4e4e7;
+}
+
+.form-actions button[type="button"]:hover {
+    background-color: #475569;
+}
+
+.form-actions button[type="submit"] {
+    background-color: #3b82f6;
+    color: white;
+}
+
+.form-actions button[type="submit"]:hover {
+    background-color: #2563eb;
+}
+
+.form-actions button:disabled {
+    background-color: #4b5563;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Strategy Content */
+.strategy-content {
+    background-color: #1e293b;
+    border-radius: 0 8px 8px 8px;
+    padding: 30px;
+}
+
+/* Webhook URLs Section */
+.webhook-section {
+    margin-bottom: 30px;
+}
+
+.webhook-card {
+    background-color: #334155;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.webhook-url-group {
+    margin-bottom: 15px;
+}
+
+.webhook-url-group:last-child {
+    margin-bottom: 0;
+}
+
+.webhook-url-group label {
+    display: block;
+    color: #cbd5e1;
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+.url-input-group {
+    display: flex;
+    gap: 10px;
+}
+
+.url-input-group input {
+    flex: 1;
+    padding: 10px;
+    background-color: #475569;
+    border: 1px solid #64748b;
+    border-radius: 4px;
+    color: #e4e4e7;
+    font-family: monospace;
+    font-size: 0.9rem;
+}
+
+.url-input-group button {
+    background-color: #059669;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    white-space: nowrap;
+}
+
+.url-input-group button:hover {
+    background-color: #047857;
+}
+
+/* Existing section styles */
+.symbols-section,
+.manual-section,
+.cash-section,
+.cooldown-section,
+.api-section {
+    margin-bottom: 30px;
+    background-color: #334155;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    border: 1px solid #475569;
+}
+
+.symbols-card,
+.manual-card,
+.cash-card,
+.cooldown-card {
+    /* Remove background since parent already has it */
+}
+
+.status-item,
+.symbol-item {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #475569;
+}
+
+.status-item:last-child,
+.symbol-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.label {
+    font-weight: bold;
+    color: #cbd5e1;
+}
+
+.value.active {
+    color: #f87171;
+    font-weight: bold;
+}
+
+.symbol-value {
+    color: #e4e4e7;
+    font-weight: 600;
+}
+
+.symbol-display {
+    margin-bottom: 15px;
+}
+
+.cash-amount {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #f1f5f9;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.cash-details {
+    text-align: center;
+    margin-bottom: 20px;
+    color: #94a3b8;
+}
+
+.update-form {
+    margin-top: 20px;
+    border-top: 1px solid #475569;
+    padding-top: 20px;
+}
+
+.update-form h3 {
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+    color: #f1f5f9;
+}
+
+.form-group {
+    display: flex;
+    gap: 10px;
+}
+
+.symbols-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.form-field label {
+    color: #cbd5e1;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+input[type="number"],
+input[type="text"] {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    background-color: #475569;
+    color: #e4e4e7;
+}
+
+input[type="number"]::placeholder,
+input[type="text"]::placeholder {
+    color: #94a3b8;
+}
+
+input[type="number"]:focus,
+input[type="text"]:focus {
+    outline: none;
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+}
+
+button {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #2563eb;
+}
+
+button:disabled {
+    background-color: #64748b;
+    cursor: not-allowed;
+}
+
+.symbols-form-group button {
+    align-self: flex-start;
+    margin-top: 10px;
+}
+
+.manual-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.manual-btn {
+    background-color: #6b7280;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: 500;
+    min-width: 120px;
+}
+
+.manual-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.manual-btn:active {
+    transform: translateY(0);
+}
+
+.manual-btn:disabled {
+    background-color: #4b5563;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.force-long {
+    background-color: #059669;
+}
+
+.force-long:hover {
+    background-color: #047857;
+}
+
+.force-short {
+    background-color: #dc2626;
+}
+
+.force-short:hover {
+    background-color: #b91c1c;
+}
+
+.force-close {
+    background-color: #f59e0b;
+    color: #000;
+}
+
+.force-close:hover {
+    background-color: #d97706;
+}
+
+.cooldown-active {
+    text-align: center;
+    color: #f87171;
+}
+
+.cooldown-inactive {
+    text-align: center;
+    color: #34d399;
+}
+
+.cooldown-label {
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.cooldown-timer {
+    font-size: 1.5rem;
+    margin: 10px 0;
+}
+
+.cooldown-controls {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #475569;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.cooldown-btn {
+    background-color: #374151;
+    color: #e4e4e7;
+    border: 1px solid #6b7280;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 0.9rem;
+}
+
+.cooldown-btn:hover {
+    background-color: #4b5563;
+    border-color: #9ca3af;
+}
+
+.cooldown-btn:active {
+    transform: translateY(1px);
+}
+
+.api-calls {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.api-call {
+    background-color: #475569;
+    border-radius: 5px;
+    padding: 15px;
+    border: 1px solid #64748b;
+}
+
+.api-call-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #64748b;
+}
+
+.timestamp {
+    color: #94a3b8;
+    font-size: 0.9rem;
+}
+
+.status {
+    font-weight: bold;
+}
+
+.status.filled,
+.status.accepted {
+    color: #34d399;
+}
+
+.status.ValidationError,
+.status.error {
+    color: #f87171;
+}
+
+.status.unknown {
+    color: #94a3b8;
+}
+
+.api-call-content {
+    display: flex;
+    gap: 20px;
+}
+
+.request,
+.response {
+    flex: 1;
+}
+
+h4 {
+    margin-bottom: 5px;
+    color: #f1f5f9;
+}
+
+pre {
+    background-color: #334155;
+    color: #e4e4e7;
+    padding: 10px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    border: 1px solid #475569;
+}
+
+.no-api-calls {
+    text-align: center;
+    padding: 30px;
+    color: #94a3b8;
+}
+
+/* Strategy Actions */
+.strategy-actions {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 2px solid #374151;
+    text-align: center;
+}
+
+.delete-strategy-btn {
+    background-color: #dc2626;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.3s;
+}
+
+.delete-strategy-btn:hover {
+    background-color: #b91c1c;
+}
+
+.manual-warning {
+    background-color: #7f1d1d;
+    color: #fca5a5;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .api-call-content {
+        flex-direction: column;
+    }
+    
+    .request,
+    .response {
+        width: 100%;
+    }
+    
+    .symbols-form-group {
+        gap: 10px;
+    }
+
+    #toast-container {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+    }
+
+    .toast {
+        max-width: none;
+    }
+
+    .tabs-header {
+        flex-wrap: wrap;
+    }
+
+    .tab-button {
+        min-width: 100px;
+    }
+
+    .url-input-group {
+        flex-direction: column;
+    }
+
+    .url-input-group button {
+        width: 100%;
+    }
+
+    .modal-content {
+        width: 95%;
+        margin: 20px;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .form-actions button {
+        width: 100%;
+    }
+}
