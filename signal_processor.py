@@ -11,6 +11,9 @@ from cooldown_manager import CooldownManager
 
 logger = logging.getLogger(__name__)
 
+# Add configuration for close position retries
+MAX_CLOSE_RETRIES = 10  # Maximum retries for close position operations
+
 class SignalProcessor:
     def __init__(self):
         self.api_client = SignalStackClient()
@@ -193,11 +196,12 @@ class SignalProcessor:
 
     async def _close_symbol_position(self, symbol: str, strategy: Strategy):
         """
-        Close positions for a symbol, retrying until successful
+        Close positions for a symbol with bounded retry logic
         """
         logger.info(f"🔥 CLOSING POSITIONS: strategy={strategy.name} symbol={symbol} calling_api")
         
-        while True:
+        retries = 0
+        while retries < MAX_CLOSE_RETRIES:
             success, price, quantity, response = await self.api_client.close_position(symbol, strategy)
             
             if success:
@@ -209,8 +213,13 @@ class SignalProcessor:
                 
                 return
             
-            logger.warning(f"🔥 CLOSE RETRY: strategy={strategy.name} symbol={symbol} retrying_in_3s")
-            await asyncio.sleep(3)  # Pause before retry
+            retries += 1
+            if retries < MAX_CLOSE_RETRIES:
+                logger.warning(f"🔥 CLOSE RETRY: strategy={strategy.name} symbol={symbol} retry={retries}/{MAX_CLOSE_RETRIES} retrying_in_3s")
+                await asyncio.sleep(3)  # Pause before retry
+            else:
+                logger.error(f"🔥 ERROR: strategy={strategy.name} symbol={symbol} max_close_retries_exceeded={MAX_CLOSE_RETRIES}")
+                break
 
     # Force methods for manual trading (bypass cooldown)
     async def force_long(self, strategy: Strategy):
