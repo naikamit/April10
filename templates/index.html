@@ -12,8 +12,6 @@
     <div id="toast-container"></div>
 
     <div class="container">
-        <h1>Multi-Strategy Trading Dashboard</h1>
-        
         <!-- Strategy Tabs -->
         <div class="tabs-container">
             <div class="tabs-header">
@@ -46,12 +44,11 @@
                 </div>
                 <form id="create-strategy-form">
                     <div class="form-group">
-                        <label for="strategy-name">Strategy Name (URL-safe):</label>
+                        <label for="strategy-name">Strategy Name:</label>
                         <input type="text" id="strategy-name" required 
                                placeholder="e.g., momentum_strategy" 
                                pattern="[a-zA-Z0-9_]{3,50}"
                                title="Alphanumeric and underscores only, 3-50 characters">
-                        <small>Only letters, numbers, and underscores. Will be used in webhook URLs.</small>
                     </div>
                     <div class="form-group">
                         <label for="strategy-long-symbol">Long Symbol (optional):</label>
@@ -145,9 +142,6 @@
             <div class="manual-section">
                 <h2>Manual Trading</h2>
                 <div class="manual-card">
-                    <div class="manual-warning">
-                        <strong>Warning:</strong> These actions bypass cooldown periods and execute immediately for this strategy.
-                    </div>
                     <div class="manual-controls">
                         <button type="button" class="manual-btn force-long" onclick="forceStrategyLong('{{ strategy.get('name', 'unknown') }}')">Force Long</button>
                         <button type="button" class="manual-btn force-short" onclick="forceStrategyShort('{{ strategy.get('name', 'unknown') }}')">Force Short</button>
