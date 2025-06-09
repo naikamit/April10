@@ -123,19 +123,11 @@ class Strategy:
         return True
     
     def add_api_call(self, request: dict, response: dict, timestamp: Optional[datetime] = None):
-        """Add API call to this strategy's history"""
-        if timestamp is None:
-            timestamp = datetime.now()
-        
-        self.api_calls.append({
-            "request": request,
-            "response": response,
-            "timestamp": timestamp.isoformat()
-        })
-        
-        # Keep only the last 100 API calls per strategy
-        if len(self.api_calls) > 100:
-            self.api_calls.pop(0)
+        """Add API call to this strategy's history with persistence"""
+        # Import here to avoid circular imports
+        from strategy_repository import StrategyRepository
+        repo = StrategyRepository()
+        repo.add_api_call_sync(self, request, response, timestamp)
     
     def get_cooldown_info(self) -> dict:
         """Get cooldown information for this strategy"""
