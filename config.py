@@ -9,7 +9,7 @@ load_dotenv()
 SIGNAL_STACK_WEBHOOK_URL = os.getenv("SIGNAL_STACK_WEBHOOK_URL", "")
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", "180"))  # 3 minutes in seconds
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", "0"))
-RETRY_DELAY = int(os.getenv("RETRY_DELAY", "1"))  # seconds
+RETRY_DELAY = float(os.getenv("RETRY_DELAY", "1"))  # seconds - changed to float to support decimal values
 
 # Trading symbols
 LONG_SYMBOL = os.getenv("LONG_SYMBOL", "")
