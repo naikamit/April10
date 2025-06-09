@@ -1,4 +1,4 @@
-# cash_manager.py - Cash balance tracking (strategy-aware)
+# cash_manager.py - Cash balance tracking with persistence integration
 import logging
 from strategy import Strategy
 from config import MINIMUM_CASH_BALANCE
@@ -34,7 +34,7 @@ class CashManager:
 
     def update_balance_from_close(self, price: float, quantity: int, strategy: Strategy) -> float:
         """
-        Update cash balance after closing a position
+        Update cash balance after closing a position with persistence
         
         Args:
             price: Price per share when closed
@@ -50,14 +50,16 @@ class CashManager:
             new_balance = current_balance + amount
             
             logger.info(f"🔥 CASH UPDATE: strategy={strategy.name} old_balance={current_balance} proceeds={amount} new_balance={new_balance}")
-            strategy.update_cash_balance(new_balance)
+            
+            # Update strategy cash balance and persist to disk
+            self._update_strategy_cash_with_persistence(strategy, new_balance)
             
             return new_balance
         return strategy.cash_balance
 
     def update_balance_from_buy(self, price: float, quantity: int, strategy: Strategy) -> float:
         """
-        Update cash balance after buying shares
+        Update cash balance after buying shares with persistence
         
         Args:
             price: Price per share when bought
@@ -73,14 +75,16 @@ class CashManager:
             new_balance = current_balance - amount
             
             logger.info(f"🔥 CASH UPDATE: strategy={strategy.name} old_balance={current_balance} spent={amount} new_balance={new_balance}")
-            strategy.update_cash_balance(new_balance)
+            
+            # Update strategy cash balance and persist to disk
+            self._update_strategy_cash_with_persistence(strategy, new_balance)
             
             return new_balance
         return strategy.cash_balance
 
     def update_balance_manual(self, amount: float, strategy: Strategy) -> bool:
         """
-        Update cash balance manually for a strategy
+        Update cash balance manually for a strategy with persistence
         
         Args:
             amount: New cash balance amount
@@ -92,9 +96,32 @@ class CashManager:
         try:
             amount = float(amount)
             old_balance = strategy.cash_balance
-            strategy.update_cash_balance(amount)
+            
+            # Update strategy cash balance and persist to disk
+            self._update_strategy_cash_with_persistence(strategy, amount)
+            
             logger.info(f"🔥 CASH UPDATE: strategy={strategy.name} manual_update old_balance={old_balance} new_balance={amount}")
             return True
         except ValueError:
             logger.error(f"🔥 ERROR: strategy={strategy.name} invalid_cash_amount={amount}")
             return False
+
+    def _update_strategy_cash_with_persistence(self, strategy: Strategy, new_amount: float):
+        """
+        Update strategy cash balance and persist to disk immediately
+        
+        Args:
+            strategy: Strategy instance to update
+            new_amount: New cash balance amount
+        """
+        # Import here to avoid circular imports
+        from strategy_repository import StrategyRepository
+        
+        # Update the strategy object
+        strategy.update_cash_balance(new_amount)
+        
+        # Persist to disk via repository (synchronous for data integrity)
+        repo = StrategyRepository()
+        repo.update_strategy(strategy.name, cash_balance=new_amount)
+        
+        logger.debug(f"🔥 PERSISTENCE: cash balance persisted for strategy={strategy.name} amount={new_amount}")
