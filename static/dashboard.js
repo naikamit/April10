@@ -1,7 +1,28 @@
-// static/dashboard.js - Multi-Strategy Dashboard JavaScript functions
+// static/dashboard.js - Multi-Strategy Dashboard JavaScript functions with Loading States
 
 let currentStrategy = null;
 let cooldownTimers = {}; // Store timers for each strategy
+
+// Loading state management
+function setButtonLoading(button, loadingText = 'Loading...') {
+    if (!button) return;
+    
+    button.dataset.originalText = button.textContent;
+    button.textContent = loadingText;
+    button.disabled = true;
+    button.classList.add('loading');
+}
+
+function restoreButton(button) {
+    if (!button) return;
+    
+    const originalText = button.dataset.originalText;
+    if (originalText) {
+        button.textContent = originalText;
+    }
+    button.disabled = false;
+    button.classList.remove('loading');
+}
 
 // Toast notification system
 function showToast(message, type = 'info') {
@@ -84,10 +105,9 @@ document.getElementById('create-strategy-form').addEventListener('submit', funct
     if (shortSymbol) formData.append('short_symbol', shortSymbol);
     formData.append('cash_balance', cash);
     
-    // Disable form during submission
+    // Set loading state
     const submitButton = e.target.querySelector('button[type="submit"]');
-    submitButton.disabled = true;
-    submitButton.textContent = 'Creating...';
+    setButtonLoading(submitButton, 'Creating...');
     
     fetch('/strategies', {
         method: 'POST',
@@ -108,8 +128,7 @@ document.getElementById('create-strategy-form').addEventListener('submit', funct
         showToast(`Error creating strategy: ${error.message}`, 'error');
     })
     .finally(() => {
-        submitButton.disabled = false;
-        submitButton.textContent = 'Create Strategy';
+        restoreButton(submitButton);
     });
 });
 
@@ -122,6 +141,10 @@ function updateStrategySymbols(strategyName) {
     const formData = new FormData();
     formData.append('long_symbol', longSymbol);
     formData.append('short_symbol', shortSymbol);
+    
+    // Set loading state
+    const updateButton = strategyDiv.querySelector('.symbols-form-group button');
+    setButtonLoading(updateButton, 'Updating...');
     
     fetch(`/strategies/${strategyName}/update-symbols`, {
         method: 'POST',
@@ -145,6 +168,9 @@ function updateStrategySymbols(strategyName) {
     })
     .catch(error => {
         showToast(`Error updating symbols: ${error.message}`, 'error');
+    })
+    .finally(() => {
+        restoreButton(updateButton);
     });
 }
 
@@ -159,6 +185,10 @@ function updateStrategyCash(strategyName) {
     
     const formData = new FormData();
     formData.append('cash_amount', cashAmount);
+    
+    // Set loading state
+    const updateButton = strategyDiv.querySelector('.cash-section .form-group button');
+    setButtonLoading(updateButton, 'Updating...');
     
     fetch(`/strategies/${strategyName}/update-cash`, {
         method: 'POST',
@@ -182,11 +212,18 @@ function updateStrategyCash(strategyName) {
     })
     .catch(error => {
         showToast(`Error updating cash: ${error.message}`, 'error');
+    })
+    .finally(() => {
+        restoreButton(updateButton);
     });
 }
 
 // Cooldown Management
 function startStrategyCooldown(strategyName) {
+    // Set loading state
+    const startButton = document.querySelector(`#strategy-${strategyName} .cooldown-controls button:first-child`);
+    setButtonLoading(startButton, 'Starting...');
+    
     fetch(`/strategies/${strategyName}/start-cooldown`, {
         method: 'POST',
         headers: {
@@ -205,10 +242,17 @@ function startStrategyCooldown(strategyName) {
     })
     .catch(error => {
         showToast(`Error starting cooldown: ${error.message}`, 'error');
+    })
+    .finally(() => {
+        restoreButton(startButton);
     });
 }
 
 function stopStrategyCooldown(strategyName) {
+    // Set loading state
+    const stopButton = document.querySelector(`#strategy-${strategyName} .cooldown-controls button:last-child`);
+    setButtonLoading(stopButton, 'Stopping...');
+    
     fetch(`/strategies/${strategyName}/stop-cooldown`, {
         method: 'POST',
         headers: {
@@ -227,6 +271,9 @@ function stopStrategyCooldown(strategyName) {
     })
     .catch(error => {
         showToast(`Error stopping cooldown: ${error.message}`, 'error');
+    })
+    .finally(() => {
+        restoreButton(stopButton);
     });
 }
 
@@ -370,8 +417,7 @@ function forceStrategyLong(strategyName) {
     }
     
     const button = document.querySelector(`#strategy-${strategyName} .force-long`);
-    button.disabled = true;
-    button.textContent = 'Processing...';
+    setButtonLoading(button, 'Processing...');
     
     fetch(`/strategies/${strategyName}/force-long`, {
         method: 'POST',
@@ -391,8 +437,7 @@ function forceStrategyLong(strategyName) {
         showToast(`Error executing Force Long: ${error.message}`, 'error');
     })
     .finally(() => {
-        button.disabled = false;
-        button.textContent = 'Force Long';
+        restoreButton(button);
     });
 }
 
@@ -424,8 +469,7 @@ function forceStrategyShort(strategyName) {
     }
     
     const button = document.querySelector(`#strategy-${strategyName} .force-short`);
-    button.disabled = true;
-    button.textContent = 'Processing...';
+    setButtonLoading(button, 'Processing...');
     
     fetch(`/strategies/${strategyName}/force-short`, {
         method: 'POST',
@@ -445,8 +489,7 @@ function forceStrategyShort(strategyName) {
         showToast(`Error executing Force Short: ${error.message}`, 'error');
     })
     .finally(() => {
-        button.disabled = false;
-        button.textContent = 'Force Short';
+        restoreButton(button);
     });
 }
 
@@ -489,8 +532,7 @@ function forceStrategyClose(strategyName) {
     }
     
     const button = document.querySelector(`#strategy-${strategyName} .force-close`);
-    button.disabled = true;
-    button.textContent = 'Processing...';
+    setButtonLoading(button, 'Processing...');
     
     fetch(`/strategies/${strategyName}/force-close`, {
         method: 'POST',
@@ -510,8 +552,7 @@ function forceStrategyClose(strategyName) {
         showToast(`Error executing Force Close: ${error.message}`, 'error');
     })
     .finally(() => {
-        button.disabled = false;
-        button.textContent = 'Force Close';
+        restoreButton(button);
     });
 }
 
@@ -542,6 +583,9 @@ function deleteStrategy(strategyName) {
         return;
     }
     
+    const button = document.querySelector(`#strategy-${strategyName} .delete-strategy-btn`);
+    setButtonLoading(button, 'Deleting...');
+    
     fetch(`/strategies/${strategyName}`, {
         method: 'DELETE'
     })
@@ -557,6 +601,9 @@ function deleteStrategy(strategyName) {
     })
     .catch(error => {
         showToast(`Error deleting strategy: ${error.message}`, 'error');
+    })
+    .finally(() => {
+        restoreButton(button);
     });
 }
 
@@ -624,4 +671,9 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         hideCreateStrategy();
     }
+});
+
+// Initialize cooldown timers when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    initializeCooldownTimers();
 });
