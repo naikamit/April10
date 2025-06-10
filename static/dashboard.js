@@ -1,14 +1,24 @@
-// static/dashboard.js - Multi-Strategy Dashboard JavaScript functions with Loading States
+// static/dashboard.js - Multi-Strategy Dashboard JavaScript functions with Loading Avatar
 
 let currentStrategy = null;
 let cooldownTimers = {}; // Store timers for each strategy
 
-// Loading state management
+// Loading state management with avatar
 function setButtonLoading(button, loadingText = 'Loading...') {
     if (!button) return;
     
     button.dataset.originalText = button.textContent;
-    button.textContent = loadingText;
+    button.dataset.originalHTML = button.innerHTML;
+    
+    // Create loading content with avatar
+    const loadingHTML = `
+        <div class="loading-content">
+            <img src="/static/loading-avatar.png" alt="" class="loading-avatar">
+            <span>${loadingText}</span>
+        </div>
+    `;
+    
+    button.innerHTML = loadingHTML;
     button.disabled = true;
     button.classList.add('loading');
 }
@@ -16,12 +26,21 @@ function setButtonLoading(button, loadingText = 'Loading...') {
 function restoreButton(button) {
     if (!button) return;
     
+    const originalHTML = button.dataset.originalHTML;
     const originalText = button.dataset.originalText;
-    if (originalText) {
+    
+    if (originalHTML) {
+        button.innerHTML = originalHTML;
+    } else if (originalText) {
         button.textContent = originalText;
     }
+    
     button.disabled = false;
     button.classList.remove('loading');
+    
+    // Clean up data attributes
+    delete button.dataset.originalHTML;
+    delete button.dataset.originalText;
 }
 
 // Toast notification system
