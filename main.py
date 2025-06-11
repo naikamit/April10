@@ -187,7 +187,7 @@ async def update_strategy_symbols(
         long_symbol = long_symbol.strip() if long_symbol.strip() else None
         short_symbol = short_symbol.strip() if short_symbol.strip() else None
         
-        strategy = strategy_repo.update_strategy(name, long_symbol=long_symbol, short_symbol=short_symbol)
+        strategy = strategy_repo.update_strategy_symbols_both(name, long_symbol, short_symbol)
         if not strategy:
             raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
         return {"status": "success", "strategy": strategy.to_dict()}
