@@ -178,8 +178,8 @@ async def delete_strategy(name: str):
 @app.post("/strategies/{name}/update-symbols")
 async def update_strategy_symbols(
     name: str,
-    long_symbol: str = Form(...),
-    short_symbol: str = Form(...)
+    long_symbol: Optional[str] = Form(""),
+    short_symbol: Optional[str] = Form("")
 ):
     """Update symbols for a specific strategy"""
     try:
