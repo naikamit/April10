@@ -385,6 +385,44 @@ class StrategyRepository:
             
             return strategy
     
+    def update_strategy_symbols_both(self, name: str, long_symbol: Optional[str], short_symbol: Optional[str]) -> Optional[Strategy]:
+        """
+        Update both symbols for a strategy (used by update-symbols endpoint)
+        Always updates both symbols regardless of None values
+        
+        Args:
+            name: Strategy name
+            long_symbol: New long symbol (can be None to clear)
+            short_symbol: New short symbol (can be None to clear)
+            
+        Returns:
+            Updated Strategy instance or None if not found
+        """
+        normalized_name = name.lower()
+        
+        with self._storage_lock:
+            strategy = self.strategies.get(normalized_name)
+            if not strategy:
+                return None
+            
+            # Track what's being updated for logging
+            updates = []
+            
+            # Always update both symbols (even if None)
+            old_long = strategy.long_symbol
+            old_short = strategy.short_symbol
+            
+            strategy.update_symbols(long_symbol=long_symbol, short_symbol=short_symbol)
+            
+            updates.append(f"long_symbol: {old_long} -> {strategy.long_symbol}")
+            updates.append(f"short_symbol: {old_short} -> {strategy.short_symbol}")
+            
+            # Save to disk immediately (blocking for data integrity)
+            self._save_strategies_to_disk()
+            logger.info(f"🔥 STRATEGY UPDATED: name={strategy.name} changes={', '.join(updates)}")
+            
+            return strategy
+    
     def delete_strategy(self, name: str) -> bool:
         """
         Delete a strategy with immediate disk persistence
