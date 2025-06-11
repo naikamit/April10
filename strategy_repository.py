@@ -408,11 +408,14 @@ class StrategyRepository:
             # Track what's being updated for logging
             updates = []
             
-            # Always update both symbols (even if None)
+            # Always update both symbols directly (bypass conditional logic)
             old_long = strategy.long_symbol
             old_short = strategy.short_symbol
             
-            strategy.update_symbols(long_symbol=long_symbol, short_symbol=short_symbol)
+            # Set symbols directly to force update (even to None)
+            strategy.long_symbol = long_symbol
+            strategy.short_symbol = short_symbol
+            strategy.updated_at = datetime.now()
             
             updates.append(f"long_symbol: {old_long} -> {strategy.long_symbol}")
             updates.append(f"short_symbol: {old_short} -> {strategy.short_symbol}")
