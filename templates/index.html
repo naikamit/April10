@@ -1,4 +1,4 @@
-<!-- templates/index.html - User-Specific Dashboard template with Full Features -->
+<!-- templates/index.html - User-Specific Dashboard template with New Webhook Structure -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,6 +14,37 @@
     
     <link rel="stylesheet" href="/static/style.css">
     <meta http-equiv="refresh" content="60">
+    <style>
+        /* Webhook categories styling */
+        .webhook-category {
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #1e293b;
+            border-radius: 6px;
+            border: 1px solid #475569;
+        }
+        
+        .webhook-category:last-child {
+            margin-bottom: 0;
+        }
+        
+        .webhook-category h3 {
+            color: #60a5fa;
+            margin: 0 0 15px 0;
+            font-size: 1rem;
+            font-weight: 500;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #475569;
+        }
+        
+        .webhook-category .webhook-url-group {
+            margin-bottom: 12px;
+        }
+        
+        .webhook-category .webhook-url-group:last-child {
+            margin-bottom: 0;
+        }
+    </style>
 </head>
 <body>
     <div id="toast-container"></div>
@@ -88,25 +119,56 @@
             <div class="webhook-section">
                 <div class="webhook-card">
                     <h2>Webhooks</h2>
-                    <div class="webhook-url-group">
-                        <label>Long:</label>
-                        <div class="url-input-group">
-                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/long" id="long-url-{{ strategy.get('name', 'unknown') }}">
-                            <button onclick="copyToClipboard('long-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                    
+                    <!-- User-Specific Webhooks -->
+                    <div class="webhook-category">
+                        <h3>User-Specific ({{ username }} only)</h3>
+                        <div class="webhook-url-group">
+                            <label>Long:</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/long" id="user-long-url-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('user-long-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                        </div>
+                        <div class="webhook-url-group">
+                            <label>Short:</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/short" id="user-short-url-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('user-short-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                        </div>
+                        <div class="webhook-url-group">
+                            <label>Close:</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/close" id="user-close-url-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('user-close-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
                         </div>
                     </div>
-                    <div class="webhook-url-group">
-                        <label>Short:</label>
-                        <div class="url-input-group">
-                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/short" id="short-url-{{ strategy.get('name', 'unknown') }}">
-                            <button onclick="copyToClipboard('short-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                    
+                    <!-- Broadcast Webhooks -->
+                    <div class="webhook-category">
+                        <h3>Broadcast (all users with "{{ strategy.get('name', 'unknown') }}" strategy)</h3>
+                        <div class="webhook-url-group">
+                            <label>Long:</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}cast/{{ strategy.get('name', 'unknown') }}/long" id="cast-long-url-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('cast-long-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
                         </div>
-                    </div>
-                    <div class="webhook-url-group">
-                        <label>Close:</label>
-                        <div class="url-input-group">
-                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/close" id="close-url-{{ strategy.get('name', 'unknown') }}">
-                            <button onclick="copyToClipboard('close-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                        <div class="webhook-url-group">
+                            <label>Short:</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}cast/{{ strategy.get('name', 'unknown') }}/short" id="cast-short-url-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('cast-short-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                        </div>
+                        <div class="webhook-url-group">
+                            <label>Close:</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}cast/{{ strategy.get('name', 'unknown') }}/close" id="cast-close-url-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('cast-close-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
                         </div>
                     </div>
                 </div>
