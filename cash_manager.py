@@ -1,4 +1,4 @@
-# cash_manager.py - Cash balance tracking with persistence integration
+# cash_manager.py - Cash balance tracking with persistence integration (Updated for multi-user support)
 import logging
 from strategy import Strategy
 from config import MINIMUM_CASH_BALANCE
@@ -23,13 +23,13 @@ class CashManager:
         cash_balance = strategy.cash_balance
         
         if cash_balance <= MINIMUM_CASH_BALANCE:
-            logger.info(f"🔥 CASH CHECK: strategy={strategy.name} cash_balance={cash_balance} minimum={MINIMUM_CASH_BALANCE} insufficient_cash=true")
+            logger.info(f"🔥 CASH CHECK: strategy={strategy.name} owner={strategy.owner} cash_balance={cash_balance} minimum={MINIMUM_CASH_BALANCE} insufficient_cash=true")
             return 0
             
         # Calculate max shares (whole shares only)
         max_shares = int(cash_balance / price)
         
-        logger.info(f"🔥 CASH CHECK: strategy={strategy.name} cash_balance={cash_balance} price={price} max_shares={max_shares}")
+        logger.info(f"🔥 CASH CHECK: strategy={strategy.name} owner={strategy.owner} cash_balance={cash_balance} price={price} max_shares={max_shares}")
         return max_shares
 
     def update_balance_from_close(self, price: float, quantity: int, strategy: Strategy) -> float:
@@ -49,7 +49,7 @@ class CashManager:
             current_balance = strategy.cash_balance
             new_balance = current_balance + amount
             
-            logger.info(f"🔥 CASH UPDATE: strategy={strategy.name} old_balance={current_balance} proceeds={amount} new_balance={new_balance}")
+            logger.info(f"🔥 CASH UPDATE: strategy={strategy.name} owner={strategy.owner} old_balance={current_balance} proceeds={amount} new_balance={new_balance}")
             
             # Update strategy cash balance and persist to disk
             self._update_strategy_cash_with_persistence(strategy, new_balance)
@@ -74,7 +74,7 @@ class CashManager:
             current_balance = strategy.cash_balance
             new_balance = current_balance - amount
             
-            logger.info(f"🔥 CASH UPDATE: strategy={strategy.name} old_balance={current_balance} spent={amount} new_balance={new_balance}")
+            logger.info(f"🔥 CASH UPDATE: strategy={strategy.name} owner={strategy.owner} old_balance={current_balance} spent={amount} new_balance={new_balance}")
             
             # Update strategy cash balance and persist to disk
             self._update_strategy_cash_with_persistence(strategy, new_balance)
@@ -100,10 +100,10 @@ class CashManager:
             # Update strategy cash balance and persist to disk
             self._update_strategy_cash_with_persistence(strategy, amount)
             
-            logger.info(f"🔥 CASH UPDATE: strategy={strategy.name} manual_update old_balance={old_balance} new_balance={amount}")
+            logger.info(f"🔥 CASH UPDATE: strategy={strategy.name} owner={strategy.owner} manual_update old_balance={old_balance} new_balance={amount}")
             return True
         except ValueError:
-            logger.error(f"🔥 ERROR: strategy={strategy.name} invalid_cash_amount={amount}")
+            logger.error(f"🔥 ERROR: strategy={strategy.name} owner={strategy.owner} invalid_cash_amount={amount}")
             return False
 
     def _update_strategy_cash_with_persistence(self, strategy: Strategy, new_amount: float):
@@ -121,7 +121,8 @@ class CashManager:
         strategy.update_cash_balance(new_amount)
         
         # Persist to disk via repository (synchronous for data integrity)
+        # Use the new owner-aware method instead of the deprecated one
         repo = StrategyRepository()
-        repo.update_strategy(strategy.name, cash_balance=new_amount)
+        repo.update_strategy_by_owner_and_name(strategy.owner, strategy.name, cash_balance=new_amount)
         
-        logger.debug(f"🔥 PERSISTENCE: cash balance persisted for strategy={strategy.name} amount={new_amount}")
+        logger.debug(f"🔥 PERSISTENCE: cash balance persisted for strategy={strategy.name} owner={strategy.owner} amount={new_amount}")
