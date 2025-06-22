@@ -113,6 +113,49 @@ function hideCreateStrategy() {
 }
 
 // Strategy Management Functions
+function updateStrategySymbols(strategyName) {
+    var strategyDiv = document.getElementById('strategy-' + strategyName);
+    var longSymbol = strategyDiv.querySelector('.long-symbol-input').value.trim();
+    var shortSymbol = strategyDiv.querySelector('.short-symbol-input').value.trim();
+    
+    var formData = new FormData();
+    formData.append('long_symbol', longSymbol);
+    formData.append('short_symbol', shortSymbol);
+    
+    // Set loading state
+    var updateButton = strategyDiv.querySelector('.symbols-form-group button');
+    setButtonLoading(updateButton, 'Updating...');
+    
+    fetch('/api/strategies/' + strategyName + '/update-symbols', {
+        method: 'POST',
+        body: formData
+    })
+    .then(function(response) {
+        return response.json();
+    })
+    .then(function(result) {
+        if (result.status === 'success') {
+            // Update the displayed symbol values
+            var symbolValues = strategyDiv.querySelectorAll('.symbol-value');
+            if (symbolValues[0]) {
+                symbolValues[0].textContent = result.strategy.long_symbol || 'Not set';
+            }
+            if (symbolValues[1]) {
+                symbolValues[1].textContent = result.strategy.short_symbol || 'Not set';
+            }
+            showToast('Symbols updated for ' + strategyName, 'success');
+        } else {
+            showToast('Error: ' + (result.detail || 'Failed to update symbols'), 'error');
+        }
+    })
+    .catch(function(error) {
+        showToast('Error updating symbols: ' + error.message, 'error');
+    })
+    .finally(function() {
+        restoreButton(updateButton);
+    });
+}
+
 function updateStrategyCash(strategyName) {
     var strategyDiv = document.getElementById('strategy-' + strategyName);
     var cashAmount = strategyDiv.querySelector('.cash-amount-input').value;
@@ -321,12 +364,38 @@ function initializeCooldownTimers() {
     }
 }
 
+// Helper function to get strategy symbols
+function getStrategySymbols(strategyName) {
+    var strategyDiv = document.getElementById('strategy-' + strategyName);
+    var symbolValues = strategyDiv.querySelectorAll('.symbol-value');
+    var longSymbol = symbolValues[0] ? symbolValues[0].textContent.trim() : 'Not set';
+    var shortSymbol = symbolValues[1] ? symbolValues[1].textContent.trim() : 'Not set';
+    
+    return {
+        long: longSymbol !== 'Not set' ? longSymbol : null,
+        short: shortSymbol !== 'Not set' ? shortSymbol : null
+    };
+}
+
 // Manual Trading Functions
 function forceStrategyLong(strategyName) {
+    var symbols = getStrategySymbols(strategyName);
+    
     var message = 'Are you sure you want to force a LONG position for ' + strategyName + '?\n\n';
     message += 'This will:\n';
-    message += '• Close any short positions\n';
-    message += '• Buy the long symbol\n';
+    
+    if (symbols.short) {
+        message += '• Close any ' + symbols.short + ' positions\n';
+    } else {
+        message += '• Close any short positions\n';
+    }
+    
+    if (symbols.long) {
+        message += '• Buy ' + symbols.long + '\n';
+    } else {
+        message += '• Buy the long symbol\n';
+    }
+    
     message += '• Bypass cooldown periods\n\n';
     message += 'Click OK to proceed.';
     
@@ -364,10 +433,23 @@ function forceStrategyLong(strategyName) {
 }
 
 function forceStrategyShort(strategyName) {
+    var symbols = getStrategySymbols(strategyName);
+    
     var message = 'Are you sure you want to force a SHORT position for ' + strategyName + '?\n\n';
     message += 'This will:\n';
-    message += '• Close any long positions\n';
-    message += '• Buy the short symbol\n';
+    
+    if (symbols.long) {
+        message += '• Close any ' + symbols.long + ' positions\n';
+    } else {
+        message += '• Close any long positions\n';
+    }
+    
+    if (symbols.short) {
+        message += '• Buy ' + symbols.short + '\n';
+    } else {
+        message += '• Buy the short symbol\n';
+    }
+    
     message += '• Bypass cooldown periods\n\n';
     message += 'Click OK to proceed.';
     
@@ -405,10 +487,23 @@ function forceStrategyShort(strategyName) {
 }
 
 function forceStrategyClose(strategyName) {
+    var symbols = getStrategySymbols(strategyName);
+    
     var message = 'Are you sure you want to FORCE CLOSE ALL positions for ' + strategyName + '?\n\n';
     message += 'This will:\n';
-    message += '• Close ALL long positions\n';
-    message += '• Close ALL short positions\n';
+    
+    if (symbols.long) {
+        message += '• Close ALL ' + symbols.long + ' positions\n';
+    } else {
+        message += '• Close ALL long positions\n';
+    }
+    
+    if (symbols.short) {
+        message += '• Close ALL ' + symbols.short + ' positions\n';
+    } else {
+        message += '• Close ALL short positions\n';
+    }
+    
     message += '• Bypass cooldown periods\n\n';
     message += 'This action affects BOTH symbols for this strategy!';
     
@@ -450,6 +545,61 @@ function forceStrategyClose(strategyName) {
     })
     .catch(function(error) {
         showToast('Error executing Force Close: ' + error.message, 'error');
+    })
+    .finally(function() {
+        restoreButton(button);
+    });
+}
+
+// Strategy Deletion
+function deleteStrategy(strategyName) {
+    var confirmed = confirm(
+        'Are you sure you want to DELETE strategy "' + strategyName + '"?\n\n' +
+        'This will permanently remove:\n' +
+        '• All strategy configuration\n' +
+        '• Cash balance information\n' +
+        '• API call history\n' +
+        '• Webhook URLs will stop working\n\n' +
+        'This action CANNOT be undone!'
+    );
+    
+    if (!confirmed) {
+        return;
+    }
+    
+    // Double confirmation for deletion
+    var doubleConfirmed = confirm(
+        'FINAL CONFIRMATION:\n\n' +
+        'Type the strategy name to confirm deletion: "' + strategyName + '"\n\n' +
+        'Are you absolutely sure you want to delete this strategy?'
+    );
+    
+    if (!doubleConfirmed) {
+        return;
+    }
+    
+    var button = document.querySelector('#strategy-' + strategyName + ' .delete-strategy-btn');
+    setButtonLoading(button, 'Deleting...');
+    
+    fetch('/api/strategies/' + strategyName, {
+        method: 'DELETE'
+    })
+    .then(function(response) {
+        return response.json();
+    })
+    .then(function(result) {
+        if (result.status === 'success') {
+            showToast('Strategy "' + strategyName + '" deleted successfully', 'success');
+            // Reload page to remove the deleted strategy
+            setTimeout(function() {
+                window.location.reload();
+            }, 1000);
+        } else {
+            showToast('Error: ' + (result.detail || 'Failed to delete strategy'), 'error');
+        }
+    })
+    .catch(function(error) {
+        showToast('Error deleting strategy: ' + error.message, 'error');
     })
     .finally(function() {
         restoreButton(button);
@@ -558,6 +708,15 @@ document.addEventListener('keypress', function(e) {
             e.preventDefault();
             var submitEvent = new Event('submit');
             document.getElementById('create-strategy-form').dispatchEvent(submitEvent);
+            return;
+        }
+        
+        // Symbol update inputs
+        if (target.classList.contains('long-symbol-input') || target.classList.contains('short-symbol-input')) {
+            e.preventDefault();
+            var strategyDiv = target.closest('.strategy-content');
+            var strategyName = strategyDiv.id.replace('strategy-', '');
+            updateStrategySymbols(strategyName);
             return;
         }
         
