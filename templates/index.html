@@ -1,10 +1,10 @@
-<!-- templates/index.html - Multi-Strategy Dashboard template - Environment-based user management with broadcast functionality -->
+<!-- templates/index.html - User-Specific Dashboard template -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RetardTrader</title>
+    <title>{{ username }} - RetardTrader</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -14,116 +14,20 @@
     
     <link rel="stylesheet" href="/static/style.css">
     <meta http-equiv="refresh" content="60">
-    <style>
-        /* Additional styles for user selection */
-        .user-selector {
-            background-color: #334155;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        
-        .user-selector h2 {
-            margin-top: 0;
-            margin-bottom: 15px;
-        }
-        
-        .user-selector select {
-            width: 100%;
-            padding: 10px;
-            background-color: #475569;
-            border: 1px solid #64748b;
-            border-radius: 4px;
-            color: #e4e4e7;
-            font-size: 1rem;
-        }
-        
-        .user-tag {
-            display: inline-block;
-            background-color: #334155;
-            color: #60a5fa;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            margin-left: 8px;
-            font-weight: normal;
-        }
-        
-        .broadcast-webhook {
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #475569;
-        }
-        
-        .broadcast-label {
-            display: inline-block;
-            background-color: #60a5fa;
-            color: #000;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            margin-left: 5px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        
-        .user-info {
-            background-color: #334155;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        
-        .user-info-title {
-            margin-top: 0;
-            margin-bottom: 15px;
-            color: #f1f5f9;
-        }
-        
-        .user-warning {
-            background-color: #7f1d1d;
-            color: #fca5a5;
-            padding: 10px;
-            border-radius: 4px;
-            margin-top: 10px;
-        }
-    </style>
 </head>
 <body>
     <div id="toast-container"></div>
 
     <div class="container">
-        <!-- System Info -->
-        <div class="user-info">
-            <h2 class="user-info-title">Environment-based User Management</h2>
-            <p>Users can only be created or deleted via environment variables.</p>
-            <p>Example: <code>SIGNAL_STACK_WEBHOOK_URL_USER1=https://api.signalstack.com/webhook/token</code></p>
-            
-            <!-- Display error if provided -->
-            {% if error %}
-            <div class="user-warning">{{ error }}</div>
-            {% endif %}
-        </div>
-        
-        <!-- User Selection -->
-        <div class="user-selector">
-            <h2>User Selection</h2>
-            <select id="user-selector" onchange="changeUser(this.value)">
-                <option value="">All Users</option>
-                {% for user in all_users %}
-                <option value="{{ user }}" {% if selected_user == user %}selected{% endif %}>{{ user }}</option>
-                {% endfor %}
-            </select>
-        </div>
+        <h1>{{ username }}</h1>
 
         <!-- Strategy Tabs -->
+        {% if strategies %}
         <div class="tabs-container">
             <div class="tabs-header">
                 {% for strategy in strategies %}
-                <div class="tab-button" data-strategy="{{ strategy.get('name', 'unknown') }}" data-user-id="{{ strategy.get('user_id', 'default') }}" onclick="switchToStrategy('{{ strategy.get('name', 'unknown') }}')">
+                <div class="tab-button" data-strategy="{{ strategy.get('name', 'unknown') }}" onclick="switchToStrategy('{{ strategy.get('name', 'unknown') }}')">
                     <span class="tab-name">{{ strategy.get('display_name', strategy.get('name', 'Unknown')) }}</span>
-                    <span class="user-tag">{{ strategy.get('user_id', 'default') }}</span>
                 </div>
                 {% endfor %}
                 <div class="tab-button tab-create" onclick="showCreateStrategy()">
@@ -131,16 +35,13 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
         <!-- Empty State (when no strategies exist) -->
         {% if not strategies %}
         <div class="empty-state">
             <h2>No Strategies Found</h2>
-            {% if selected_user %}
-            <p>No strategies found for user "{{ selected_user }}". Create a new strategy or select a different user.</p>
-            {% else %}
-            <p>No strategies found. Create your first strategy to get started.</p>
-            {% endif %}
+            <p>Create your first strategy to get started with {{ username }}</p>
             <button class="create-strategy-btn" onclick="showCreateStrategy()">Create Strategy</button>
         </div>
         {% endif %}
@@ -149,10 +50,11 @@
         <div id="create-strategy-modal" class="modal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>Create New Strategy</h3>
+                    <h3>Create New Strategy for {{ username }}</h3>
                     <span class="modal-close" onclick="hideCreateStrategy()">&times;</span>
                 </div>
                 <form id="create-strategy-form">
+                    <input type="hidden" id="strategy-owner" value="{{ username }}">
                     <div class="form-group">
                         <label for="strategy-name">Strategy Name:</label>
                         <input type="text" id="strategy-name" required 
@@ -161,20 +63,11 @@
                                title="Alphanumeric and underscores only, 3-50 characters">
                     </div>
                     <div class="form-group">
-                        <label for="strategy-user-id">User ID:</label>
-                        <select id="strategy-user-id">
-                            {% for user in all_users %}
-                            <option value="{{ user }}" {% if selected_user == user %}selected{% endif %}>{{ user }}</option>
-                            {% endfor %}
-                        </select>
-                        <small>Users can only be created via environment variables</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="strategy-long-symbol">Long (optional):</label>
+                        <label for="strategy-long-symbol">Long Symbol (optional):</label>
                         <input type="text" id="strategy-long-symbol" placeholder="e.g., MSTU">
                     </div>
                     <div class="form-group">
-                        <label for="strategy-short-symbol">Short (optional):</label>
+                        <label for="strategy-short-symbol">Short Symbol (optional):</label>
                         <input type="text" id="strategy-short-symbol" placeholder="e.g., MSTZ">
                     </div>
                     <div class="form-group">
@@ -191,112 +84,15 @@
 
         <!-- Strategy Content Tabs -->
         {% for strategy in strategies %}
-        <div class="strategy-content" id="strategy-{{ strategy.get('name', 'unknown') }}" style="display: none;" data-user-id="{{ strategy.get('user_id', 'default') }}">
-            
-            <!-- Strategy User Info -->
-            <div style="margin-bottom: 20px;">
-                <h2>
-                    {{ strategy.get('display_name', strategy.get('name', 'Unknown')) }}
-                    <span class="user-tag">{{ strategy.get('user_id', 'default') }}</span>
-                </h2>
-            </div>
-            
-            <!-- Webhook URLs Section -->
-            <div class="webhook-section">
-                <div class="webhook-card">
-                    <h2>Webhooks</h2>
-                    
-                    <!-- User-specific webhooks -->
-                    <div class="webhook-url-group">
-                        <label>Long:</label>
-                        <div class="url-input-group">
-                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('user_id', 'default') }}/{{ strategy.get('name', 'unknown') }}/long" id="long-url-{{ strategy.get('name', 'unknown') }}">
-                            <button onclick="copyToClipboard('long-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
-                        </div>
-                    </div>
-                    <div class="webhook-url-group">
-                        <label>Short:</label>
-                        <div class="url-input-group">
-                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('user_id', 'default') }}/{{ strategy.get('name', 'unknown') }}/short" id="short-url-{{ strategy.get('name', 'unknown') }}">
-                            <button onclick="copyToClipboard('short-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
-                        </div>
-                    </div>
-                    <div class="webhook-url-group">
-                        <label>Close:</label>
-                        <div class="url-input-group">
-                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('user_id', 'default') }}/{{ strategy.get('name', 'unknown') }}/close" id="close-url-{{ strategy.get('name', 'unknown') }}">
-                            <button onclick="copyToClipboard('close-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
-                        </div>
-                    </div>
-                    
-                    <!-- Broadcast webhooks -->
-                    <div class="broadcast-webhook">
-                        <div class="webhook-url-group">
-                            <label>Broadcast Long: <span class="broadcast-label">All Users</span></label>
-                            <div class="url-input-group">
-                                <input type="text" readonly value="{{ request.base_url }}cast/{{ strategy.get('name', 'unknown') }}/long" id="broadcast-long-{{ strategy.get('name', 'unknown') }}">
-                                <button onclick="copyToClipboard('broadcast-long-{{ strategy.get('name', 'unknown') }}')">Copy</button>
-                            </div>
-                        </div>
-                        <div class="webhook-url-group">
-                            <label>Broadcast Short: <span class="broadcast-label">All Users</span></label>
-                            <div class="url-input-group">
-                                <input type="text" readonly value="{{ request.base_url }}cast/{{ strategy.get('name', 'unknown') }}/short" id="broadcast-short-{{ strategy.get('name', 'unknown') }}">
-                                <button onclick="copyToClipboard('broadcast-short-{{ strategy.get('name', 'unknown') }}')">Copy</button>
-                            </div>
-                        </div>
-                        <div class="webhook-url-group">
-                            <label>Broadcast Close: <span class="broadcast-label">All Users</span></label>
-                            <div class="url-input-group">
-                                <input type="text" readonly value="{{ request.base_url }}cast/{{ strategy.get('name', 'unknown') }}/close" id="broadcast-close-{{ strategy.get('name', 'unknown') }}">
-                                <button onclick="copyToClipboard('broadcast-close-{{ strategy.get('name', 'unknown') }}')">Copy</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Trading Symbols Section -->
-            <div class="symbols-section">
-                <div class="symbols-card">
-                    <h2>Symbols</h2>
-                    <div class="symbol-display">
-                        <div class="symbol-item">
-                            <span class="label">Long:</span>
-                            <span class="symbol-value">{{ strategy.get('long_symbol') or "Not set" }}</span>
-                        </div>
-                        <div class="symbol-item">
-                            <span class="label">Short:</span>
-                            <span class="symbol-value">{{ strategy.get('short_symbol') or "Not set" }}</span>
-                        </div>
-                    </div>
-                    
-                    <form class="update-form">
-                        <h3>Update Symbols</h3>
-                        <div class="symbols-form-group">
-                            <div class="form-field">
-                                <label>Long:</label>
-                                <input type="text" class="long-symbol-input" 
-                                       value="{{ strategy.get('long_symbol') or '' }}" 
-                                       placeholder="e.g., MSTU">
-                            </div>
-                            <div class="form-field">
-                                <label>Short:</label>
-                                <input type="text" class="short-symbol-input" 
-                                       value="{{ strategy.get('short_symbol') or '' }}" 
-                                       placeholder="e.g., MSTZ">
-                            </div>
-                            <input type="hidden" name="user_id" value="{{ strategy.get('user_id', 'default') }}">
-                            <button type="button" onclick="updateStrategySymbols('{{ strategy.get('name', 'unknown') }}')">Update</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+        <div class="strategy-content" id="strategy-{{ strategy.get('name', 'unknown') }}" style="display: none;">
             
             <!-- Manual Trading Section -->
             <div class="manual-section">
                 <div class="manual-card">
                     <h2>Override</h2>
+                    <div class="manual-warning">
+                        <strong>⚠️ Manual Override:</strong> These actions bypass all cooldown periods and execute immediately.
+                    </div>
                     <div class="manual-controls">
                         <button type="button" class="manual-btn force-long" onclick="forceStrategyLong('{{ strategy.get('name', 'unknown') }}')">Force Long</button>
                         <button type="button" class="manual-btn force-short" onclick="forceStrategyShort('{{ strategy.get('name', 'unknown') }}')">Force Short</button>
@@ -311,7 +107,7 @@
                     <h2>Options BP</h2>
                     <div class="cash-amount">${{ "%.2f"|format(strategy.get('cash_balance', 0) or 0) }}</div>
                     <div class="cash-details">
-                        <div>User: {{ strategy.get('user_id', 'default') }}</div>
+                        <div>Strategy: {{ strategy.get('display_name', strategy.get('name', 'Unknown')) }}</div>
                         <div>Last updated: 
                             {% if strategy.get('cash_info') and strategy.cash_info.get('staleness') %}
                                 {% set staleness = strategy.cash_info.staleness %}
@@ -398,10 +194,6 @@
                 </div>
             </div>
 
-            <!-- Strategy Actions -->
-            <div class="strategy-actions">
-                <button type="button" class="delete-strategy-btn" onclick="deleteStrategy('{{ strategy.get('name', 'unknown') }}')">Delete Strategy</button>
-            </div>
         </div>
         {% endfor %}
     </div>
