@@ -1,4 +1,4 @@
-# strategy_repository.py - Strategy CRUD operations with JSON file persistence
+# strategy_repository.py - Strategy CRUD operations with JSON file persistence (Fixed for multi-user same names)
 import threading
 import logging
 import json
@@ -44,15 +44,15 @@ class AsyncWriteManager:
         
         logger.info("🔥 PERSISTENCE: async write manager stopped")
     
-    async def queue_api_log_write(self, strategy_name: str, api_calls: List[dict]):
+    async def queue_api_log_write(self, strategy_key: str, api_calls: List[dict]):
         """Queue an API log write (non-blocking)"""
         if not self.running:
             await self.start()
         
         try:
-            await self.write_queue.put(('api_log', strategy_name, api_calls.copy()))
+            await self.write_queue.put(('api_log', strategy_key, api_calls.copy()))
         except Exception as e:
-            logger.error(f"🔥 ERROR: failed to queue API log write for {strategy_name}: {str(e)}")
+            logger.error(f"🔥 ERROR: failed to queue API log write for {strategy_key}: {str(e)}")
     
     async def _background_writer(self):
         """Background coroutine that processes the write queue"""
@@ -67,15 +67,15 @@ class AsyncWriteManager:
                 if write_task is None:
                     break
                 
-                write_type, strategy_name, data = write_task
+                write_type, strategy_key, data = write_task
                 
                 if write_type == 'api_log':
                     try:
-                        api_log_file = f'/app/data/api_logs/{strategy_name}.json'
+                        api_log_file = f'/app/data/api_logs/{strategy_key}.json'
                         _atomic_write_json(data, api_log_file)
-                        logger.debug(f"🔥 PERSISTENCE: API logs written for {strategy_name}")
+                        logger.debug(f"🔥 PERSISTENCE: API logs written for {strategy_key}")
                     except Exception as e:
-                        logger.error(f"🔥 ERROR: background API log write failed for {strategy_name}: {str(e)}")
+                        logger.error(f"🔥 ERROR: background API log write failed for {strategy_key}: {str(e)}")
                 
             except asyncio.TimeoutError:
                 # Normal timeout, continue loop
@@ -138,6 +138,7 @@ def _load_json_file(file_path: str, default_value=None):
 class StrategyRepository:
     """
     Repository for managing Strategy entities with JSON file persistence.
+    Uses composite keys {owner}_{strategy_name} to allow multiple users to have strategies with the same name.
     Uses /app/data/strategies.json for strategy data and /app/data/api_logs/ for API call logs.
     """
     
@@ -153,7 +154,7 @@ class StrategyRepository:
     
     def _initialize(self):
         """Initialize the repository and load data from disk"""
-        self.strategies: Dict[str, Strategy] = {}
+        self.strategies: Dict[str, Strategy] = {}  # Key: {owner}_{strategy_name}
         self._storage_lock = threading.Lock()
         self._async_write_manager = AsyncWriteManager()
         self._disk_available = False
@@ -167,21 +168,45 @@ class StrategyRepository:
         else:
             logger.warning("🔥 PERSISTENCE: disk not available, using memory-only mode")
     
+    def _make_strategy_key(self, owner: str, strategy_name: str) -> str:
+        """Create composite key for strategy storage"""
+        return f"{owner.lower()}_{strategy_name.lower()}"
+    
+    def _parse_strategy_key(self, strategy_key: str) -> tuple:
+        """Parse composite key back to (owner, strategy_name)"""
+        parts = strategy_key.split('_', 1)
+        if len(parts) != 2:
+            # Handle legacy keys (migration)
+            return 'default', parts[0]
+        return parts[0], parts[1]
+    
     def _load_strategies_from_disk(self):
-        """Load all strategies and their API logs from disk"""
+        """Load all strategies and their API logs from disk with migration support"""
         strategies_file = '/app/data/strategies.json'
         
         # Load strategy configurations
         strategies_data = _load_json_file(strategies_file, {})
         
-        for strategy_name, strategy_data in strategies_data.items():
+        migrated = False
+        new_strategies_data = {}
+        
+        for strategy_key, strategy_data in strategies_data.items():
             try:
                 # Handle backward compatibility - if no owner field, use 'default'
                 owner = strategy_data.get('owner', 'default')
+                strategy_name = strategy_data.get('name', strategy_key)
+                
+                # Determine if this is a legacy key (no underscore or wrong format)
+                if '_' not in strategy_key or strategy_key != self._make_strategy_key(owner, strategy_name):
+                    # This is a legacy key, needs migration
+                    new_key = self._make_strategy_key(owner, strategy_name)
+                    logger.info(f"🔥 MIGRATION: strategy key '{strategy_key}' -> '{new_key}'")
+                    migrated = True
+                    strategy_key = new_key
                 
                 # Create strategy object from saved data
                 strategy = Strategy(
-                    name=strategy_data.get('name', strategy_name),
+                    name=strategy_name,
                     owner=owner,
                     long_symbol=strategy_data.get('long_symbol'),
                     short_symbol=strategy_data.get('short_symbol'),
@@ -217,17 +242,42 @@ class StrategyRepository:
                         strategy.in_cooldown = False
                         strategy.cooldown_end_time = None
                 
-                # Load API call logs
-                api_log_file = f'/app/data/api_logs/{strategy_name}.json'
-                api_calls = _load_json_file(api_log_file, [])
+                # Load API call logs (try both old and new key formats)
+                api_calls = []
+                for log_key in [strategy_key, strategy_name]:  # Try new key first, then old
+                    api_log_file = f'/app/data/api_logs/{log_key}.json'
+                    if os.path.exists(api_log_file):
+                        api_calls = _load_json_file(api_log_file, [])
+                        if log_key != strategy_key:
+                            # Migrate API log file to new key
+                            logger.info(f"🔥 MIGRATION: API log file '{log_key}.json' -> '{strategy_key}.json'")
+                            new_api_log_file = f'/app/data/api_logs/{strategy_key}.json'
+                            _atomic_write_json(api_calls, new_api_log_file)
+                            # Remove old file
+                            try:
+                                os.remove(api_log_file)
+                            except:
+                                pass
+                        break
+                
                 strategy.api_calls = api_calls[-100:]  # Keep only last 100
                 
-                self.strategies[strategy_name.lower()] = strategy
-                logger.debug(f"🔥 PERSISTENCE: loaded strategy {strategy.name} (owner: {strategy.owner}) with {len(strategy.api_calls)} API calls")
+                self.strategies[strategy_key] = strategy
+                new_strategies_data[strategy_key] = strategy_data
+                
+                logger.debug(f"🔥 PERSISTENCE: loaded strategy {strategy.name} (owner: {strategy.owner}) with {len(strategy.api_calls)} API calls, key: {strategy_key}")
                 
             except Exception as e:
-                logger.error(f"🔥 ERROR: failed to load strategy {strategy_name}: {str(e)}")
+                logger.error(f"🔥 ERROR: failed to load strategy {strategy_key}: {str(e)}")
                 continue
+        
+        # Save migrated data if needed
+        if migrated:
+            try:
+                _atomic_write_json(new_strategies_data, strategies_file)
+                logger.info("🔥 MIGRATION: saved migrated strategy data to disk")
+            except Exception as e:
+                logger.error(f"🔥 ERROR: failed to save migrated data: {str(e)}")
     
     def _save_strategies_to_disk(self):
         """Save all strategy configurations to disk (synchronous)"""
@@ -240,8 +290,8 @@ class StrategyRepository:
         try:
             # Convert strategies to JSON-serializable format
             strategies_data = {}
-            for strategy_name, strategy in self.strategies.items():
-                strategies_data[strategy_name] = {
+            for strategy_key, strategy in self.strategies.items():
+                strategies_data[strategy_key] = {
                     'name': strategy.name,
                     'display_name': getattr(strategy, 'display_name', strategy.name),
                     'owner': strategy.owner,
@@ -260,12 +310,12 @@ class StrategyRepository:
         except Exception as e:
             logger.error(f"🔥 ERROR: failed to save strategies to disk: {str(e)}")
     
-    async def _save_api_logs_async(self, strategy_name: str, api_calls: List[dict]):
+    async def _save_api_logs_async(self, strategy_key: str, api_calls: List[dict]):
         """Save API logs asynchronously (non-blocking)"""
         if not self._disk_available:
             return
         
-        await self._async_write_manager.queue_api_log_write(strategy_name, api_calls)
+        await self._async_write_manager.queue_api_log_write(strategy_key, api_calls)
     
     def create_strategy(self, name: str, owner: str, long_symbol: Optional[str] = None, 
                        short_symbol: Optional[str] = None, cash_balance: float = 0.0) -> Strategy:
@@ -283,19 +333,19 @@ class StrategyRepository:
             Created Strategy instance
             
         Raises:
-            ValueError: If strategy name is invalid or already exists
+            ValueError: If strategy name is invalid or already exists for this user
         """
-        normalized_name = name.lower()
+        strategy_key = self._make_strategy_key(owner, name)
         
         with self._storage_lock:
-            if normalized_name in self.strategies:
-                raise ValueError(f"Strategy '{name}' already exists")
+            if strategy_key in self.strategies:
+                raise ValueError(f"Strategy '{name}' already exists for user '{owner}'")
             
             # Create strategy object
             strategy = Strategy(name, owner, long_symbol, short_symbol, cash_balance)
             
             # Add to memory
-            self.strategies[normalized_name] = strategy
+            self.strategies[strategy_key] = strategy
             
             # Save to disk immediately (blocking for data integrity)
             self._save_strategies_to_disk()
@@ -303,19 +353,21 @@ class StrategyRepository:
             # Create empty API log file
             if self._disk_available:
                 try:
-                    api_log_file = f'/app/data/api_logs/{normalized_name}.json'
+                    api_log_file = f'/app/data/api_logs/{strategy_key}.json'
                     _atomic_write_json([], api_log_file)
                 except Exception as e:
-                    logger.error(f"🔥 ERROR: failed to create API log file for {name}: {str(e)}")
+                    logger.error(f"🔥 ERROR: failed to create API log file for {strategy_key}: {str(e)}")
             
             logger.info(f"🔥 STRATEGY CREATED: name={strategy.name} owner={strategy.owner} display_name={getattr(strategy, 'display_name', strategy.name)} "
-                       f"long={strategy.long_symbol} short={strategy.short_symbol} cash={strategy.cash_balance}")
+                       f"long={strategy.long_symbol} short={strategy.short_symbol} cash={strategy.cash_balance} key={strategy_key}")
             
             return strategy
     
     def get_strategy(self, name: str) -> Optional[Strategy]:
         """
-        Get a strategy by name (from memory)
+        DEPRECATED: Get a strategy by name only (ambiguous with multiple users)
+        This method is kept for backward compatibility but may return any user's strategy with this name.
+        Use get_strategy_by_owner_and_name() instead for specific user strategies.
         
         Args:
             name: Strategy name (case insensitive)
@@ -326,11 +378,15 @@ class StrategyRepository:
         normalized_name = name.lower()
         
         with self._storage_lock:
-            strategy = self.strategies.get(normalized_name)
-            if strategy and not hasattr(strategy, 'display_name'):
-                strategy.display_name = strategy.name
-                logger.debug(f"🔥 STRATEGY MIGRATION: added display_name to {strategy.name}")
-            return strategy
+            # Find first strategy with this name (any user)
+            for strategy_key, strategy in self.strategies.items():
+                if strategy.name == normalized_name:
+                    if not hasattr(strategy, 'display_name'):
+                        strategy.display_name = strategy.name
+                        logger.debug(f"🔥 STRATEGY MIGRATION: added display_name to {strategy.name}")
+                    logger.warning(f"🔥 DEPRECATED: get_strategy() used for '{name}', returned user '{strategy.owner}' strategy")
+                    return strategy
+            return None
     
     def get_strategy_by_owner_and_name(self, owner: str, name: str) -> Optional[Strategy]:
         """
@@ -343,17 +399,14 @@ class StrategyRepository:
         Returns:
             Strategy instance or None if not found
         """
-        normalized_owner = owner.lower()
-        normalized_name = name.lower()
+        strategy_key = self._make_strategy_key(owner, name)
         
         with self._storage_lock:
-            strategy = self.strategies.get(normalized_name)
-            if strategy and strategy.owner == normalized_owner:
-                if not hasattr(strategy, 'display_name'):
-                    strategy.display_name = strategy.name
-                    logger.debug(f"🔥 STRATEGY MIGRATION: added display_name to {strategy.name}")
-                return strategy
-            return None
+            strategy = self.strategies.get(strategy_key)
+            if strategy and not hasattr(strategy, 'display_name'):
+                strategy.display_name = strategy.name
+                logger.debug(f"🔥 STRATEGY MIGRATION: added display_name to {strategy.name}")
+            return strategy
     
     def get_strategies_by_name(self, name: str) -> List[Strategy]:
         """
@@ -406,7 +459,11 @@ class StrategyRepository:
         normalized_owner = owner.lower()
         
         with self._storage_lock:
-            strategies = [s for s in self.strategies.values() if s.owner == normalized_owner]
+            strategies = []
+            for strategy_key, strategy in self.strategies.items():
+                if strategy.owner == normalized_owner:
+                    strategies.append(strategy)
+            
             # Sort by creation date
             strategies.sort(key=lambda s: s.created_at)
             return strategies
@@ -425,7 +482,8 @@ class StrategyRepository:
     def update_strategy(self, name: str, long_symbol: Optional[str] = None,
                        short_symbol: Optional[str] = None, cash_balance: Optional[float] = None) -> Optional[Strategy]:
         """
-        Update an existing strategy with immediate disk persistence
+        DEPRECATED: Update an existing strategy by name only (ambiguous with multiple users)
+        This method is kept for backward compatibility but will update the first found strategy.
         
         Args:
             name: Strategy name
@@ -436,10 +494,32 @@ class StrategyRepository:
         Returns:
             Updated Strategy instance or None if not found
         """
-        normalized_name = name.lower()
+        # Find strategy using deprecated method
+        strategy = self.get_strategy(name)
+        if not strategy:
+            return None
+        
+        return self.update_strategy_by_owner_and_name(strategy.owner, name, long_symbol, short_symbol, cash_balance)
+    
+    def update_strategy_by_owner_and_name(self, owner: str, name: str, long_symbol: Optional[str] = None,
+                                         short_symbol: Optional[str] = None, cash_balance: Optional[float] = None) -> Optional[Strategy]:
+        """
+        Update an existing strategy by owner and name with immediate disk persistence
+        
+        Args:
+            owner: Strategy owner
+            name: Strategy name
+            long_symbol: New long symbol (if provided)
+            short_symbol: New short symbol (if provided)
+            cash_balance: New cash balance (if provided)
+            
+        Returns:
+            Updated Strategy instance or None if not found
+        """
+        strategy_key = self._make_strategy_key(owner, name)
         
         with self._storage_lock:
-            strategy = self.strategies.get(normalized_name)
+            strategy = self.strategies.get(strategy_key)
             if not strategy:
                 return None
             
@@ -470,8 +550,8 @@ class StrategyRepository:
     
     def update_strategy_symbols_both(self, name: str, long_symbol: Optional[str], short_symbol: Optional[str]) -> Optional[Strategy]:
         """
-        Update both symbols for a strategy (used by update-symbols endpoint)
-        Always updates both symbols regardless of None values
+        DEPRECATED: Update both symbols for a strategy by name only (ambiguous with multiple users)
+        This method is kept for backward compatibility.
         
         Args:
             name: Strategy name
@@ -481,10 +561,31 @@ class StrategyRepository:
         Returns:
             Updated Strategy instance or None if not found
         """
-        normalized_name = name.lower()
+        # Find strategy using deprecated method
+        strategy = self.get_strategy(name)
+        if not strategy:
+            return None
+        
+        return self.update_strategy_symbols_both_by_owner_and_name(strategy.owner, name, long_symbol, short_symbol)
+    
+    def update_strategy_symbols_both_by_owner_and_name(self, owner: str, name: str, long_symbol: Optional[str], short_symbol: Optional[str]) -> Optional[Strategy]:
+        """
+        Update both symbols for a strategy (used by update-symbols endpoint)
+        Always updates both symbols regardless of None values
+        
+        Args:
+            owner: Strategy owner
+            name: Strategy name
+            long_symbol: New long symbol (can be None to clear)
+            short_symbol: New short symbol (can be None to clear)
+            
+        Returns:
+            Updated Strategy instance or None if not found
+        """
+        strategy_key = self._make_strategy_key(owner, name)
         
         with self._storage_lock:
-            strategy = self.strategies.get(normalized_name)
+            strategy = self.strategies.get(strategy_key)
             if not strategy:
                 return None
             
@@ -511,7 +612,8 @@ class StrategyRepository:
     
     def delete_strategy(self, name: str) -> bool:
         """
-        Delete a strategy with immediate disk persistence
+        DEPRECATED: Delete a strategy by name only (ambiguous with multiple users)
+        This method is kept for backward compatibility but will delete the first found strategy.
         
         Args:
             name: Strategy name
@@ -519,11 +621,29 @@ class StrategyRepository:
         Returns:
             True if strategy was deleted, False if not found
         """
-        normalized_name = name.lower()
+        # Find strategy using deprecated method
+        strategy = self.get_strategy(name)
+        if not strategy:
+            return False
+        
+        return self.delete_strategy_by_owner_and_name(strategy.owner, name)
+    
+    def delete_strategy_by_owner_and_name(self, owner: str, name: str) -> bool:
+        """
+        Delete a strategy by owner and name with immediate disk persistence
+        
+        Args:
+            owner: Strategy owner
+            name: Strategy name
+            
+        Returns:
+            True if strategy was deleted, False if not found
+        """
+        strategy_key = self._make_strategy_key(owner, name)
         
         with self._storage_lock:
-            if normalized_name in self.strategies:
-                strategy = self.strategies.pop(normalized_name)
+            if strategy_key in self.strategies:
+                strategy = self.strategies.pop(strategy_key)
                 
                 # Save to disk immediately (blocking for data integrity)
                 self._save_strategies_to_disk()
@@ -531,39 +651,56 @@ class StrategyRepository:
                 # Delete API log file
                 if self._disk_available:
                     try:
-                        api_log_file = f'/app/data/api_logs/{normalized_name}.json'
+                        api_log_file = f'/app/data/api_logs/{strategy_key}.json'
                         if os.path.exists(api_log_file):
                             os.remove(api_log_file)
                     except Exception as e:
-                        logger.error(f"🔥 ERROR: failed to delete API log file for {name}: {str(e)}")
+                        logger.error(f"🔥 ERROR: failed to delete API log file for {strategy_key}: {str(e)}")
                 
-                logger.info(f"🔥 STRATEGY DELETED: name={strategy.name} owner={strategy.owner} display_name={getattr(strategy, 'display_name', strategy.name)}")
+                logger.info(f"🔥 STRATEGY DELETED: name={strategy.name} owner={strategy.owner} display_name={getattr(strategy, 'display_name', strategy.name)} key={strategy_key}")
                 return True
             return False
     
     def strategy_exists(self, name: str) -> bool:
         """
-        Check if a strategy exists (from memory)
+        DEPRECATED: Check if a strategy exists by name only (ambiguous with multiple users)
+        This method is kept for backward compatibility.
         
         Args:
             name: Strategy name (case insensitive)
             
         Returns:
-            True if strategy exists, False otherwise
+            True if any strategy with this name exists, False otherwise
         """
-        normalized_name = name.lower()
+        return self.get_strategy(name) is not None
+    
+    def strategy_exists_for_owner(self, owner: str, name: str) -> bool:
+        """
+        Check if a strategy exists for a specific owner
+        
+        Args:
+            owner: Strategy owner
+            name: Strategy name (case insensitive)
+            
+        Returns:
+            True if strategy exists for this owner, False otherwise
+        """
+        strategy_key = self._make_strategy_key(owner, name)
         with self._storage_lock:
-            return normalized_name in self.strategies
+            return strategy_key in self.strategies
     
     def get_strategy_names(self) -> List[str]:
         """
-        Get list of all strategy names (from memory)
+        Get list of all unique strategy names (not composite keys)
         
         Returns:
-            List of strategy names (lowercase)
+            List of strategy names (lowercase, deduplicated)
         """
         with self._storage_lock:
-            return list(self.strategies.keys())
+            names = set()
+            for strategy in self.strategies.values():
+                names.add(strategy.name)
+            return sorted(list(names))
     
     async def add_api_call_async(self, strategy: Strategy, request: dict, response: dict, timestamp: Optional[datetime] = None):
         """
@@ -592,7 +729,8 @@ class StrategyRepository:
             strategy.api_calls.pop(0)
         
         # Queue background write (non-blocking)
-        await self._save_api_logs_async(strategy.name, strategy.api_calls)
+        strategy_key = self._make_strategy_key(strategy.owner, strategy.name)
+        await self._save_api_logs_async(strategy_key, strategy.api_calls)
     
     def add_api_call_sync(self, strategy: Strategy, request: dict, response: dict, timestamp: Optional[datetime] = None):
         """
@@ -625,7 +763,8 @@ class StrategyRepository:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 # Create task for background write
-                loop.create_task(self._save_api_logs_async(strategy.name, strategy.api_calls))
+                strategy_key = self._make_strategy_key(strategy.owner, strategy.name)
+                loop.create_task(self._save_api_logs_async(strategy_key, strategy.api_calls))
             else:
                 # No event loop running, skip async write
                 logger.debug("🔥 PERSISTENCE: no event loop available for async API log write")
