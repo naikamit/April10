@@ -1,7 +1,8 @@
-// static/dashboard.js - User-Specific Dashboard JavaScript functions with Loading Avatar
+// static/dashboard.js - User-Specific Dashboard JavaScript functions with User-Aware API endpoints
 
 var currentStrategy = null;
 var cooldownTimers = {}; // Store timers for each strategy
+var currentUsername = null; // Will be set from HTML template
 
 // Loading state management with avatar
 function setButtonLoading(button, loadingText) {
@@ -112,8 +113,13 @@ function hideCreateStrategy() {
     document.getElementById('create-strategy-form').reset();
 }
 
-// Strategy Management Functions
+// Strategy Management Functions (Updated to use user-aware API endpoints)
 function updateStrategySymbols(strategyName) {
+    if (!currentUsername) {
+        showToast('Error: Username not available', 'error');
+        return;
+    }
+    
     var strategyDiv = document.getElementById('strategy-' + strategyName);
     var longSymbol = strategyDiv.querySelector('.long-symbol-input').value.trim();
     var shortSymbol = strategyDiv.querySelector('.short-symbol-input').value.trim();
@@ -126,7 +132,7 @@ function updateStrategySymbols(strategyName) {
     var updateButton = strategyDiv.querySelector('.symbols-form-group button');
     setButtonLoading(updateButton, 'Updating...');
     
-    fetch('/api/strategies/' + strategyName + '/update-symbols', {
+    fetch('/api/users/' + currentUsername + '/strategies/' + strategyName + '/update-symbols', {
         method: 'POST',
         body: formData
     })
@@ -157,6 +163,11 @@ function updateStrategySymbols(strategyName) {
 }
 
 function updateStrategyCash(strategyName) {
+    if (!currentUsername) {
+        showToast('Error: Username not available', 'error');
+        return;
+    }
+    
     var strategyDiv = document.getElementById('strategy-' + strategyName);
     var cashAmount = strategyDiv.querySelector('.cash-amount-input').value;
     
@@ -172,7 +183,7 @@ function updateStrategyCash(strategyName) {
     var updateButton = strategyDiv.querySelector('.cash-section .form-group button');
     setButtonLoading(updateButton, 'Updating...');
     
-    fetch('/api/strategies/' + strategyName + '/update-cash', {
+    fetch('/api/users/' + currentUsername + '/strategies/' + strategyName + '/update-cash', {
         method: 'POST',
         body: formData
     })
@@ -202,13 +213,18 @@ function updateStrategyCash(strategyName) {
     });
 }
 
-// Cooldown Management
+// Cooldown Management (Updated to use user-aware API endpoints)
 function startStrategyCooldown(strategyName) {
+    if (!currentUsername) {
+        showToast('Error: Username not available', 'error');
+        return;
+    }
+    
     // Set loading state
     var startButton = document.querySelector('#strategy-' + strategyName + ' .cooldown-controls button:first-child');
     setButtonLoading(startButton, 'Starting...');
     
-    fetch('/api/strategies/' + strategyName + '/start-cooldown', {
+    fetch('/api/users/' + currentUsername + '/strategies/' + strategyName + '/start-cooldown', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -235,11 +251,16 @@ function startStrategyCooldown(strategyName) {
 }
 
 function stopStrategyCooldown(strategyName) {
+    if (!currentUsername) {
+        showToast('Error: Username not available', 'error');
+        return;
+    }
+    
     // Set loading state
     var stopButton = document.querySelector('#strategy-' + strategyName + ' .cooldown-controls button:last-child');
     setButtonLoading(stopButton, 'Stopping...');
     
-    fetch('/api/strategies/' + strategyName + '/stop-cooldown', {
+    fetch('/api/users/' + currentUsername + '/strategies/' + strategyName + '/stop-cooldown', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -377,8 +398,13 @@ function getStrategySymbols(strategyName) {
     };
 }
 
-// Manual Trading Functions
+// Manual Trading Functions (Updated to use user-aware API endpoints)
 function forceStrategyLong(strategyName) {
+    if (!currentUsername) {
+        showToast('Error: Username not available', 'error');
+        return;
+    }
+    
     var symbols = getStrategySymbols(strategyName);
     
     var message = 'Are you sure you want to force a LONG position for ' + strategyName + '?\n\n';
@@ -408,7 +434,7 @@ function forceStrategyLong(strategyName) {
     var button = document.querySelector('#strategy-' + strategyName + ' .force-long');
     setButtonLoading(button, 'Processing...');
     
-    fetch('/api/strategies/' + strategyName + '/force-long', {
+    fetch('/api/users/' + currentUsername + '/strategies/' + strategyName + '/force-long', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -433,6 +459,11 @@ function forceStrategyLong(strategyName) {
 }
 
 function forceStrategyShort(strategyName) {
+    if (!currentUsername) {
+        showToast('Error: Username not available', 'error');
+        return;
+    }
+    
     var symbols = getStrategySymbols(strategyName);
     
     var message = 'Are you sure you want to force a SHORT position for ' + strategyName + '?\n\n';
@@ -462,7 +493,7 @@ function forceStrategyShort(strategyName) {
     var button = document.querySelector('#strategy-' + strategyName + ' .force-short');
     setButtonLoading(button, 'Processing...');
     
-    fetch('/api/strategies/' + strategyName + '/force-short', {
+    fetch('/api/users/' + currentUsername + '/strategies/' + strategyName + '/force-short', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -487,6 +518,11 @@ function forceStrategyShort(strategyName) {
 }
 
 function forceStrategyClose(strategyName) {
+    if (!currentUsername) {
+        showToast('Error: Username not available', 'error');
+        return;
+    }
+    
     var symbols = getStrategySymbols(strategyName);
     
     var message = 'Are you sure you want to FORCE CLOSE ALL positions for ' + strategyName + '?\n\n';
@@ -527,7 +563,7 @@ function forceStrategyClose(strategyName) {
     var button = document.querySelector('#strategy-' + strategyName + ' .force-close');
     setButtonLoading(button, 'Processing...');
     
-    fetch('/api/strategies/' + strategyName + '/force-close', {
+    fetch('/api/users/' + currentUsername + '/strategies/' + strategyName + '/force-close', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -551,8 +587,13 @@ function forceStrategyClose(strategyName) {
     });
 }
 
-// Strategy Deletion
+// Strategy Deletion (Updated to use user-aware API endpoints)
 function deleteStrategy(strategyName) {
+    if (!currentUsername) {
+        showToast('Error: Username not available', 'error');
+        return;
+    }
+    
     var confirmed = confirm(
         'Are you sure you want to DELETE strategy "' + strategyName + '"?\n\n' +
         'This will permanently remove:\n' +
@@ -581,7 +622,7 @@ function deleteStrategy(strategyName) {
     var button = document.querySelector('#strategy-' + strategyName + ' .delete-strategy-btn');
     setButtonLoading(button, 'Deleting...');
     
-    fetch('/api/strategies/' + strategyName, {
+    fetch('/api/users/' + currentUsername + '/strategies/' + strategyName, {
         method: 'DELETE'
     })
     .then(function(response) {
@@ -696,6 +737,12 @@ function setupCreateStrategyForm() {
             });
         });
     }
+}
+
+// Set current username function (called from HTML template)
+function setCurrentUsername(username) {
+    currentUsername = username;
+    console.log('🔥 DASHBOARD: Current user set to', currentUsername);
 }
 
 // Handle Enter key in form inputs
