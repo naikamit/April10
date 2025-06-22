@@ -565,6 +565,184 @@ async def force_strategy_close(name: str, background_tasks: BackgroundTasks):
         logger.exception(f"🔥 ERROR: force_close_error={str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# User-aware API endpoints (NEW - target specific user's strategies)
+@app.post("/api/users/{username}/strategies/{strategy_name}/update-symbols")
+async def update_user_strategy_symbols(
+    username: str,
+    strategy_name: str,
+    long_symbol: Optional[str] = Form(""),
+    short_symbol: Optional[str] = Form("")
+):
+    """Update symbols for a specific user's strategy"""
+    try:
+        # Check if user exists
+        if not user_exists(username):
+            raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+        
+        # Clean up inputs
+        long_symbol = long_symbol.strip() if long_symbol.strip() else None
+        short_symbol = short_symbol.strip() if short_symbol.strip() else None
+        
+        strategy = strategy_repo.update_strategy_symbols_both_by_owner_and_name(username, strategy_name, long_symbol, short_symbol)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{strategy_name}' not found for user '{username}'")
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: update_user_symbols_error={str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/users/{username}/strategies/{strategy_name}/update-cash")
+async def update_user_strategy_cash(username: str, strategy_name: str, cash_amount: float = Form(...)):
+    """Update cash balance for a specific user's strategy"""
+    try:
+        # Check if user exists
+        if not user_exists(username):
+            raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+        
+        strategy = strategy_repo.get_strategy_by_owner_and_name(username, strategy_name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{strategy_name}' not found for user '{username}'")
+        
+        success = cash_manager.update_balance_manual(cash_amount, strategy)
+        if not success:
+            raise HTTPException(status_code=400, detail="Invalid cash amount")
+        
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: update_user_cash_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/users/{username}/strategies/{strategy_name}/start-cooldown")
+async def start_user_strategy_cooldown(username: str, strategy_name: str):
+    """Start cooldown for a specific user's strategy"""
+    try:
+        # Check if user exists
+        if not user_exists(username):
+            raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+        
+        strategy = strategy_repo.get_strategy_by_owner_and_name(username, strategy_name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{strategy_name}' not found for user '{username}'")
+        
+        cooldown_manager.start_cooldown(strategy)
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: start_user_cooldown_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/users/{username}/strategies/{strategy_name}/stop-cooldown")
+async def stop_user_strategy_cooldown(username: str, strategy_name: str):
+    """Stop cooldown for a specific user's strategy"""
+    try:
+        # Check if user exists
+        if not user_exists(username):
+            raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+        
+        strategy = strategy_repo.get_strategy_by_owner_and_name(username, strategy_name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{strategy_name}' not found for user '{username}'")
+        
+        cooldown_manager.stop_cooldown(strategy)
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: stop_user_cooldown_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/users/{username}/strategies/{strategy_name}/force-long")
+async def force_user_strategy_long(username: str, strategy_name: str, background_tasks: BackgroundTasks):
+    """Force long position for a specific user's strategy"""
+    try:
+        # Check if user exists
+        if not user_exists(username):
+            raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+        
+        strategy = strategy_repo.get_strategy_by_owner_and_name(username, strategy_name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{strategy_name}' not found for user '{username}'")
+        
+        if strategy.is_processing:
+            return {"status": "error", "message": "Strategy is already processing a signal"}
+        
+        background_tasks.add_task(signal_processor.force_long, strategy)
+        return {"status": "success", "message": f"Force long initiated for strategy '{strategy_name}' (user: {username})"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_user_long_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/users/{username}/strategies/{strategy_name}/force-short")
+async def force_user_strategy_short(username: str, strategy_name: str, background_tasks: BackgroundTasks):
+    """Force short position for a specific user's strategy"""
+    try:
+        # Check if user exists
+        if not user_exists(username):
+            raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+        
+        strategy = strategy_repo.get_strategy_by_owner_and_name(username, strategy_name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{strategy_name}' not found for user '{username}'")
+        
+        if strategy.is_processing:
+            return {"status": "error", "message": "Strategy is already processing a signal"}
+        
+        background_tasks.add_task(signal_processor.force_short, strategy)
+        return {"status": "success", "message": f"Force short initiated for strategy '{strategy_name}' (user: {username})"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_user_short_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/users/{username}/strategies/{strategy_name}/force-close")
+async def force_user_strategy_close(username: str, strategy_name: str, background_tasks: BackgroundTasks):
+    """Force close all positions for a specific user's strategy"""
+    try:
+        # Check if user exists
+        if not user_exists(username):
+            raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+        
+        strategy = strategy_repo.get_strategy_by_owner_and_name(username, strategy_name)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{strategy_name}' not found for user '{username}'")
+        
+        if strategy.is_processing:
+            return {"status": "error", "message": "Strategy is already processing a signal"}
+        
+        background_tasks.add_task(signal_processor.force_close, strategy)
+        return {"status": "success", "message": f"Force close initiated for strategy '{strategy_name}' (user: {username})"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_user_close_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/users/{username}/strategies/{strategy_name}")
+async def delete_user_strategy(username: str, strategy_name: str):
+    """Delete a specific user's strategy"""
+    try:
+        # Check if user exists
+        if not user_exists(username):
+            raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+        
+        success = strategy_repo.delete_strategy_by_owner_and_name(username, strategy_name)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Strategy '{strategy_name}' not found for user '{username}'")
+        return {"status": "success", "message": f"Strategy '{strategy_name}' deleted for user '{username}'"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: delete_user_strategy_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # System endpoints
 @app.get("/status")
 async def status():
