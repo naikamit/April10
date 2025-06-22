@@ -1,4 +1,4 @@
-<!-- templates/index.html - User-Specific Dashboard template -->
+<!-- templates/index.html - User-Specific Dashboard template with Full Features -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,7 +22,6 @@
         <h1>{{ username }}</h1>
 
         <!-- Strategy Tabs -->
-        {% if strategies %}
         <div class="tabs-container">
             <div class="tabs-header">
                 {% for strategy in strategies %}
@@ -35,14 +34,13 @@
                 </div>
             </div>
         </div>
-        {% endif %}
 
         <!-- Empty State (when no strategies exist) -->
         {% if not strategies %}
         <div class="empty-state">
             <h2>No Strategies Found</h2>
             <p>Create your first strategy to get started with {{ username }}</p>
-            <button class="create-strategy-btn" onclick="showCreateStrategy()">Create Strategy</button>
+            <button class="create-strategy-btn" onclick="showCreateStrategy()">Create Your First Strategy</button>
         </div>
         {% endif %}
 
@@ -63,11 +61,11 @@
                                title="Alphanumeric and underscores only, 3-50 characters">
                     </div>
                     <div class="form-group">
-                        <label for="strategy-long-symbol">Long Symbol (optional):</label>
+                        <label for="strategy-long-symbol">Long (optional):</label>
                         <input type="text" id="strategy-long-symbol" placeholder="e.g., MSTU">
                     </div>
                     <div class="form-group">
-                        <label for="strategy-short-symbol">Short Symbol (optional):</label>
+                        <label for="strategy-short-symbol">Short (optional):</label>
                         <input type="text" id="strategy-short-symbol" placeholder="e.g., MSTZ">
                     </div>
                     <div class="form-group">
@@ -86,13 +84,74 @@
         {% for strategy in strategies %}
         <div class="strategy-content" id="strategy-{{ strategy.get('name', 'unknown') }}" style="display: none;">
             
+            <!-- Webhook URLs Section -->
+            <div class="webhook-section">
+                <div class="webhook-card">
+                    <h2>Webhooks</h2>
+                    <div class="webhook-url-group">
+                        <label>Long:</label>
+                        <div class="url-input-group">
+                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/long" id="long-url-{{ strategy.get('name', 'unknown') }}">
+                            <button onclick="copyToClipboard('long-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                        </div>
+                    </div>
+                    <div class="webhook-url-group">
+                        <label>Short:</label>
+                        <div class="url-input-group">
+                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/short" id="short-url-{{ strategy.get('name', 'unknown') }}">
+                            <button onclick="copyToClipboard('short-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                        </div>
+                    </div>
+                    <div class="webhook-url-group">
+                        <label>Close:</label>
+                        <div class="url-input-group">
+                            <input type="text" readonly value="{{ request.base_url }}{{ strategy.get('name', 'unknown') }}/close" id="close-url-{{ strategy.get('name', 'unknown') }}">
+                            <button onclick="copyToClipboard('close-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trading Symbols Section -->
+            <div class="symbols-section">
+                <div class="symbols-card">
+                    <h2>Symbols</h2>
+                    <div class="symbol-display">
+                        <div class="symbol-item">
+                            <span class="label">Long:</span>
+                            <span class="symbol-value">{{ strategy.get('long_symbol') or "Not set" }}</span>
+                        </div>
+                        <div class="symbol-item">
+                            <span class="label">Short:</span>
+                            <span class="symbol-value">{{ strategy.get('short_symbol') or "Not set" }}</span>
+                        </div>
+                    </div>
+                    
+                    <form class="update-form">
+                        <h3>Update Symbols</h3>
+                        <div class="symbols-form-group">
+                            <div class="form-field">
+                                <label>Long:</label>
+                                <input type="text" class="long-symbol-input" 
+                                       value="{{ strategy.get('long_symbol') or '' }}" 
+                                       placeholder="e.g., MSTU">
+                            </div>
+                            <div class="form-field">
+                                <label>Short:</label>
+                                <input type="text" class="short-symbol-input" 
+                                       value="{{ strategy.get('short_symbol') or '' }}" 
+                                       placeholder="e.g., MSTZ">
+                            </div>
+                            <button type="button" onclick="updateStrategySymbols('{{ strategy.get('name', 'unknown') }}')">Update</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
             <!-- Manual Trading Section -->
             <div class="manual-section">
                 <div class="manual-card">
                     <h2>Override</h2>
-                    <div class="manual-warning">
-                        <strong>⚠️ Manual Override:</strong> These actions bypass all cooldown periods and execute immediately.
-                    </div>
                     <div class="manual-controls">
                         <button type="button" class="manual-btn force-long" onclick="forceStrategyLong('{{ strategy.get('name', 'unknown') }}')">Force Long</button>
                         <button type="button" class="manual-btn force-short" onclick="forceStrategyShort('{{ strategy.get('name', 'unknown') }}')">Force Short</button>
@@ -194,6 +253,10 @@
                 </div>
             </div>
 
+            <!-- Strategy Actions -->
+            <div class="strategy-actions">
+                <button type="button" class="delete-strategy-btn" onclick="deleteStrategy('{{ strategy.get('name', 'unknown') }}')">Delete Strategy</button>
+            </div>
         </div>
         {% endfor %}
     </div>
