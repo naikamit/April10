@@ -1,4 +1,4 @@
-# strategy.py - Core Strategy entity for multi-strategy trading system
+# strategy.py - Core Strategy entity for multi-strategy trading system - Add user_id field to support multi-user functionality
 from datetime import datetime, timedelta
 from typing import Optional
 import re
@@ -9,13 +9,14 @@ class Strategy:
     with its own symbols, cash balance, and cooldown state.
     """
     
-    def __init__(self, name: str, long_symbol: Optional[str] = None, 
+    def __init__(self, name: str, user_id: str = "default", long_symbol: Optional[str] = None, 
                  short_symbol: Optional[str] = None, cash_balance: float = 0.0):
         """
         Initialize a new Strategy
         
         Args:
             name: URL-safe strategy name (alphanumeric + underscores)
+            user_id: User identifier for this strategy
             long_symbol: Symbol to buy for long signals (nullable)
             short_symbol: Symbol to buy for short signals (nullable) 
             cash_balance: Initial cash balance for this strategy
@@ -27,6 +28,7 @@ class Strategy:
             # Set core attributes first
             self.name = name.lower()  # Store in lowercase for URL consistency
             self.display_name = name  # Preserve original casing for UI display
+            self.user_id = user_id.lower()  # Store user_id in lowercase for consistency
             
             # Process symbols
             self.long_symbol = long_symbol.strip() if long_symbol and long_symbol.strip() else None
@@ -80,7 +82,7 @@ class Strategy:
             return False
         
         # Check for reserved names
-        reserved_names = {'strategies', 'static', 'api', 'status', 'debug'}
+        reserved_names = {'strategies', 'static', 'api', 'status', 'debug', 'cast'}
         if name.lower() in reserved_names:
             return False
         
@@ -183,6 +185,7 @@ class Strategy:
         cash_info = self.get_cash_balance_info()
         return {
             "name": self.name,
+            "user_id": getattr(self, 'user_id', 'default'),  # Include user_id, default if not present
             "display_name": getattr(self, 'display_name', self.name),
             "long_symbol": self.long_symbol,
             "short_symbol": self.short_symbol,
@@ -197,4 +200,4 @@ class Strategy:
         }
     
     def __repr__(self):
-        return f"Strategy(name='{self.name}', long='{self.long_symbol}', short='{self.short_symbol}', cash={self.cash_balance})"
+        return f"Strategy(user='{self.user_id}', name='{self.name}', long='{self.long_symbol}', short='{self.short_symbol}', cash={self.cash_balance})"
