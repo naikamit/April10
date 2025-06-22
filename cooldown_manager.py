@@ -1,4 +1,4 @@
-# cooldown_manager.py - Cool down period logic - Updated for multi-user support
+# cooldown_manager.py - Cool down period logic (strategy-aware)
 import logging
 from datetime import datetime, timedelta
 from strategy import Strategy
@@ -17,7 +17,7 @@ class CooldownManager:
         Args:
             strategy: Strategy instance to start cooldown for
         """
-        logger.info(f"🔥 COOLDOWN STARTED: user={strategy.user_id} strategy={strategy.name} duration={COOLDOWN_PERIOD_HOURS}h end_time={strategy.cooldown_end_time}")
+        logger.info(f"🔥 COOLDOWN STARTED: strategy={strategy.name} owner={strategy.owner} duration={COOLDOWN_PERIOD_HOURS}h end_time={strategy.cooldown_end_time}")
         strategy.start_cooldown(COOLDOWN_PERIOD_HOURS)
 
     def is_in_cooldown(self, strategy: Strategy) -> bool:
@@ -40,7 +40,7 @@ class CooldownManager:
             strategy: Strategy instance to stop cooldown for
         """
         strategy.stop_cooldown()
-        logger.info(f"🔥 COOLDOWN STOPPED: user={strategy.user_id} strategy={strategy.name} manually_stopped=true")
+        logger.info(f"🔥 COOLDOWN STOPPED: strategy={strategy.name} owner={strategy.owner} manually_stopped=true")
 
     def get_cooldown_info(self, strategy: Strategy) -> dict:
         """
