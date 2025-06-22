@@ -325,6 +325,9 @@
 
     <script src="/static/dashboard.js"></script>
     <script>
+        // Set current username for API calls
+        setCurrentUsername('{{ username }}');
+        
         // Initialize the first tab or show empty state
         document.addEventListener('DOMContentLoaded', function() {
             {% if strategies %}
