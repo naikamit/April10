@@ -1,10 +1,13 @@
-# main.py - Entry point, FastAPI setup - Headless API-only mode with multi-user support
+# main.py - Entry point, FastAPI setup - User-specific dashboards with headless mode
 import logging
 import os
 from datetime import datetime
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Form, BackgroundTasks, HTTPException
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi import FastAPI, Request, Form, BackgroundTasks, HTTPException, Query
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+import uvicorn
 from typing import Optional, List, Dict
 
 from config import DASHBOARD_PORT, get_valid_users, is_valid_user, get_all_webhook_urls
@@ -34,7 +37,7 @@ cooldown_manager = CooldownManager()
 @asynccontextmanager
 async def lifespan(app):
     # Startup event
-    logger.info("🔥 SYSTEM STARTUP: Multi-User Trading Webhook Service (Headless Mode)")
+    logger.info("🔥 SYSTEM STARTUP: Multi-User Trading Webhook Service (Path-based User Dashboards)")
     
     # Log configured users from environment variables
     valid_users = get_valid_users()
@@ -49,17 +52,62 @@ async def lifespan(app):
     # Shutdown event
     logger.info("🔥 SYSTEM SHUTDOWN: Multi-User Trading Webhook Service")
 
-# Initialize FastAPI in headless mode (no UI)
+# Initialize FastAPI
 app = FastAPI(title="Multi-User Trading Webhook Service", lifespan=lifespan)
 
-# Root path - simple status page instead of dashboard
+# Setup templates and static files for user dashboards
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Root path - service info and redirect guidance
 @app.get("/", response_class=PlainTextResponse)
 async def service_status():
     """Basic service status indicator"""
     valid_users = get_valid_users()
     all_strategies = strategy_repo.get_all_strategies()
     
-    return f"Service Running\n\nUsers: {len(valid_users)}\nStrategies: {len(all_strategies)}\n\nWebhook Format: /<user_id>/<strategy_name>/<signal>"
+    return f"RetardTrader Service Running\n\nUsers: {len(valid_users)}\nStrategies: {len(all_strategies)}\n\n" + \
+           f"User Dashboard: /<user_id>\nWebhook Format: /<user_id>/<strategy_name>/<signal>\nBroadcast: /cast/<strategy_name>/<signal>"
+
+# User-specific dashboard route
+@app.get("/{user_id}", response_class=HTMLResponse)
+async def user_dashboard(request: Request, user_id: str):
+    """User-specific dashboard by path (not query parameter)"""
+    
+    # Validate user exists in environment variables
+    if user_id.lower() != 'default' and not is_valid_user(user_id):
+        return templates.TemplateResponse(
+            "index.html", 
+            {
+                "request": request,
+                "strategies": [],
+                "all_users": get_valid_users(),
+                "selected_user": user_id,
+                "error": f"User '{user_id}' does not exist. Users can only be created via environment variables."
+            }
+        )
+    
+    # Get all valid users for the dropdown
+    all_users = get_valid_users()
+    if 'default' not in all_users:
+        all_users.append('default')
+    
+    # Get strategies for this user
+    strategies = strategy_repo.get_user_strategies(user_id)
+    
+    # Get webhook URLs for all valid users
+    webhook_urls = get_all_webhook_urls()
+    
+    return templates.TemplateResponse(
+        "index.html", 
+        {
+            "request": request,
+            "strategies": [strategy.to_dict() for strategy in strategies],
+            "all_users": all_users,
+            "webhook_urls": webhook_urls,
+            "selected_user": user_id
+        }
+    )
 
 # User-specific webhook endpoints
 @app.post("/{user_id}/{strategy_name}/long")
@@ -209,6 +257,268 @@ async def _process_broadcast(strategy_name: str, signal: str, request: Request, 
             }
         )
 
+# Strategy management endpoints needed for dashboard functionality
+@app.post("/strategies")
+async def create_strategy(
+    name: str = Form(...),
+    user_id: str = Form("default"),
+    long_symbol: Optional[str] = Form(None),
+    short_symbol: Optional[str] = Form(None),
+    cash_balance: float = Form(0.0)
+):
+    """Create a new strategy"""
+    try:
+        # Clean up inputs
+        user_id = user_id.strip() if user_id and user_id.strip() else "default"
+        
+        # Validate user exists in environment variables
+        if user_id.lower() != 'default' and not is_valid_user(user_id):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"User '{user_id}' does not exist. Users can only be created via environment variables."
+            )
+        
+        long_symbol = long_symbol.strip() if long_symbol and long_symbol.strip() else None
+        short_symbol = short_symbol.strip() if short_symbol and short_symbol.strip() else None
+        
+        strategy = strategy_repo.create_strategy(name, user_id, long_symbol, short_symbol, cash_balance)
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: create_strategy_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Minimal API to support dashboard functionality
+@app.get("/strategies")
+async def list_strategies(user_id: Optional[str] = None):
+    """List all strategies, optionally filtered by user_id"""
+    if user_id:
+        # Validate user exists in environment variables
+        if user_id.lower() != 'default' and not is_valid_user(user_id):
+            return {
+                "user_id": user_id,
+                "error": "User does not exist. Users can only be created via environment variables.",
+                "strategies": [],
+                "count": 0
+            }
+            
+        strategies = strategy_repo.get_user_strategies(user_id)
+        return {
+            "user_id": user_id,
+            "strategies": [strategy.to_dict() for strategy in strategies],
+            "count": len(strategies)
+        }
+    else:
+        strategies = strategy_repo.get_all_strategies()
+        return {
+            "strategies": [strategy.to_dict() for strategy in strategies],
+            "count": len(strategies)
+        }
+
+@app.delete("/strategies/{name}")
+async def delete_strategy(name: str, user_id: str = "default"):
+    """Delete a strategy"""
+    # Validate user exists in environment variables
+    if user_id.lower() != 'default' and not is_valid_user(user_id):
+        raise HTTPException(
+            status_code=404, 
+            detail=f"User '{user_id}' does not exist. Users can only be created via environment variables."
+        )
+        
+    success = strategy_repo.delete_strategy(name, user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found for user '{user_id}'")
+    return {"status": "success", "message": f"Strategy '{name}' deleted for user '{user_id}'"}
+
+# User management endpoints
+@app.get("/users")
+async def list_users():
+    """List all users from environment variables"""
+    users = get_valid_users()
+    # Always include default user
+    if 'default' not in users:
+        users.append('default')
+    
+    # Get webhook URLs for all users
+    webhook_urls = get_all_webhook_urls()
+    
+    # Format user info
+    user_info = []
+    for user_id in users:
+        # Get strategies for this user
+        strategies = strategy_repo.get_user_strategies(user_id)
+        
+        # Add user info
+        user_info.append({
+            "user_id": user_id,
+            "has_webhook_url": user_id.lower() == 'default' or user_id.lower() in webhook_urls,
+            "strategy_count": len(strategies),
+            "strategies": [s.name for s in strategies]
+        })
+    
+    return {
+        "users": user_info,
+        "count": len(user_info),
+        "env_var_info": "Users can only be created/deleted via SIGNAL_STACK_WEBHOOK_URL_* environment variables"
+    }
+
+# Strategy-specific operations for dashboard
+@app.post("/strategies/{name}/update-symbols")
+async def update_strategy_symbols(
+    name: str,
+    user_id: str = Form("default"),
+    long_symbol: Optional[str] = Form(""),
+    short_symbol: Optional[str] = Form("")
+):
+    """Update symbols for a specific strategy"""
+    try:
+        # Clean up inputs
+        user_id = user_id.strip() if user_id and user_id.strip() else "default"
+        
+        # Validate user exists in environment variables
+        if user_id.lower() != 'default' and not is_valid_user(user_id):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"User '{user_id}' does not exist. Users can only be created via environment variables."
+            )
+            
+        long_symbol = long_symbol.strip() if long_symbol.strip() else None
+        short_symbol = short_symbol.strip() if short_symbol.strip() else None
+        
+        strategy = strategy_repo.update_strategy_symbols_both(name, user_id, long_symbol, short_symbol)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found for user '{user_id}'")
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: update_symbols_error={str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/strategies/{name}/update-cash")
+async def update_strategy_cash(
+    name: str, 
+    cash_amount: float = Form(...),
+    user_id: str = Form("default")
+):
+    """Update cash balance for a specific strategy"""
+    try:
+        user_id = user_id.strip() if user_id and user_id.strip() else "default"
+        
+        # Validate user exists in environment variables
+        if user_id.lower() != 'default' and not is_valid_user(user_id):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"User '{user_id}' does not exist. Users can only be created via environment variables."
+            )
+            
+        strategy = strategy_repo.get_strategy(name, user_id)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found for user '{user_id}'")
+        
+        success = cash_manager.update_balance_manual(cash_amount, strategy)
+        if not success:
+            raise HTTPException(status_code=400, detail="Invalid cash amount")
+        
+        return {"status": "success", "strategy": strategy.to_dict()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: update_cash_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/strategies/{name}/force-long")
+async def force_strategy_long(name: str, user_id: str = Form("default"), background_tasks: BackgroundTasks = None):
+    """Force long position for a specific strategy"""
+    try:
+        if background_tasks is None:
+            background_tasks = BackgroundTasks()
+            
+        user_id = user_id.strip() if user_id and user_id.strip() else "default"
+        
+        # Validate user exists in environment variables
+        if user_id.lower() != 'default' and not is_valid_user(user_id):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"User '{user_id}' does not exist. Users can only be created via environment variables."
+            )
+            
+        strategy = strategy_repo.get_strategy(name, user_id)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found for user '{user_id}'")
+        
+        if strategy.is_processing:
+            return {"status": "error", "message": "Strategy is already processing a signal"}
+        
+        background_tasks.add_task(signal_processor.force_long, strategy)
+        return {"status": "success", "message": f"Force long initiated for user '{user_id}' strategy '{name}'"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_long_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/strategies/{name}/force-short")
+async def force_strategy_short(name: str, user_id: str = Form("default"), background_tasks: BackgroundTasks = None):
+    """Force short position for a specific strategy"""
+    try:
+        if background_tasks is None:
+            background_tasks = BackgroundTasks()
+            
+        user_id = user_id.strip() if user_id and user_id.strip() else "default"
+        
+        # Validate user exists in environment variables
+        if user_id.lower() != 'default' and not is_valid_user(user_id):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"User '{user_id}' does not exist. Users can only be created via environment variables."
+            )
+            
+        strategy = strategy_repo.get_strategy(name, user_id)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found for user '{user_id}'")
+        
+        if strategy.is_processing:
+            return {"status": "error", "message": "Strategy is already processing a signal"}
+        
+        background_tasks.add_task(signal_processor.force_short, strategy)
+        return {"status": "success", "message": f"Force short initiated for user '{user_id}' strategy '{name}'"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_short_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/strategies/{name}/force-close")
+async def force_strategy_close(name: str, user_id: str = Form("default"), background_tasks: BackgroundTasks = None):
+    """Force close all positions for a specific strategy"""
+    try:
+        if background_tasks is None:
+            background_tasks = BackgroundTasks()
+            
+        user_id = user_id.strip() if user_id and user_id.strip() else "default"
+        
+        # Validate user exists in environment variables
+        if user_id.lower() != 'default' and not is_valid_user(user_id):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"User '{user_id}' does not exist. Users can only be created via environment variables."
+            )
+            
+        strategy = strategy_repo.get_strategy(name, user_id)
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found for user '{user_id}'")
+        
+        if strategy.is_processing:
+            return {"status": "error", "message": "Strategy is already processing a signal"}
+        
+        background_tasks.add_task(signal_processor.force_close, strategy)
+        return {"status": "success", "message": f"Force close initiated for user '{user_id}' strategy '{name}'"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_close_error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # System status endpoint
 @app.get("/status")
 async def status():
@@ -234,7 +544,7 @@ async def status():
     
     return {
         "status": "ok",
-        "system": "multi-user-strategy-headless",
+        "system": "multi-user-strategy",
         "users": len(all_users),
         "users_with_webhook": len(webhook_urls),
         "strategies": len(strategies),
