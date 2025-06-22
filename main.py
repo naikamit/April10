@@ -1,16 +1,16 @@
-# main.py - Entry point, FastAPI setup (multi-user)
+# main.py - Entry point, FastAPI setup (environment-based multi-user)
 import logging
 import os
 from datetime import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form, BackgroundTasks, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
 from typing import Optional
 
-from config import DASHBOARD_PORT
+from config import DASHBOARD_PORT, get_available_users, user_exists, get_users_from_environment
 from strategy_repository import StrategyRepository
 from signal_processor import SignalProcessor
 from cash_manager import CashManager
@@ -37,13 +37,15 @@ cooldown_manager = CooldownManager()
 @asynccontextmanager
 async def lifespan(app):
     # Startup event
-    logger.info("🔥 SYSTEM STARTUP: Multi-User Trading Webhook Service")
+    available_users = get_available_users()
+    logger.info(f"🔥 SYSTEM STARTUP: Environment-Based Multi-User Trading Webhook Service")
+    logger.info(f"🔥 AVAILABLE USERS: {', '.join(available_users) if available_users else 'None configured'}")
     yield
     # Shutdown event
-    logger.info("🔥 SYSTEM SHUTDOWN: Multi-User Trading Webhook Service")
+    logger.info("🔥 SYSTEM SHUTDOWN: Environment-Based Multi-User Trading Webhook Service")
 
 # Initialize FastAPI
-app = FastAPI(title="Multi-User Trading Webhook Service", lifespan=lifespan)
+app = FastAPI(title="Environment-Based Multi-User Trading Webhook Service", lifespan=lifespan)
 
 # Setup templates and static files
 templates = Jinja2Templates(directory="templates")
@@ -104,11 +106,130 @@ async def _process_webhook(strategy_name: str, signal: str, request: Request, ba
             }
         )
 
+# Root route - show available users
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """Show available users or redirect if only one user"""
+    available_users = get_available_users()
+    users_data = get_users_from_environment()
+    
+    if len(available_users) == 1:
+        # If only one user, redirect to their dashboard
+        return RedirectResponse(url=f"/{available_users[0]}", status_code=302)
+    elif len(available_users) == 0:
+        # No users configured
+        return HTMLResponse(f"""
+        <html>
+            <head>
+                <title>RetardTrader</title>
+                <link rel="stylesheet" href="/static/style.css">
+            </head>
+            <body style="font-family: Arial; margin: 40px; background: #0f172a; color: #e4e4e7;">
+                <div class="container">
+                    <h1>No Users Configured</h1>
+                    <p>To add users, set environment variables like:</p>
+                    <ul>
+                        <li><code>SIGNAL_STACK_WEBHOOK_URL_AMIT=https://your-webhook-url</code></li>
+                        <li><code>SIGNAL_STACK_WEBHOOK_URL_JOHN=https://your-webhook-url</code></li>
+                    </ul>
+                    <p>Then restart the service.</p>
+                </div>
+            </body>
+        </html>
+        """)
+    else:
+        # Multiple users - show selection
+        user_links = ''.join(
+            f'<div class="user-card"><a href="/{user}" class="user-link">{user}</a></div>' 
+            for user in sorted(available_users)
+        )
+        return HTMLResponse(f"""
+        <html>
+            <head>
+                <title>RetardTrader</title>
+                <link rel="stylesheet" href="/static/style.css">
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Select User</h1>
+                    <div class="users-grid">
+                        {user_links}
+                    </div>
+                    <div style="margin-top: 30px; text-align: center; color: #94a3b8;">
+                        <p>{len(available_users)} users available</p>
+                    </div>
+                </div>
+                <style>
+                .users-grid {{
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 20px;
+                    margin: 30px 0;
+                }}
+                .user-card {{
+                    background: #1e293b;
+                    border-radius: 8px;
+                    padding: 0;
+                    border: 1px solid #374151;
+                    transition: all 0.3s;
+                }}
+                .user-card:hover {{
+                    border-color: #60a5fa;
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                }}
+                .user-link {{
+                    display: block;
+                    padding: 30px 20px;
+                    color: #e4e4e7;
+                    text-decoration: none;
+                    font-size: 1.2rem;
+                    font-weight: 500;
+                    text-align: center;
+                    transition: color 0.3s;
+                }}
+                .user-link:hover {{
+                    color: #60a5fa;
+                }}
+                </style>
+            </body>
+        </html>
+        """)
+
 # User-specific dashboard
 @app.get("/{username}", response_class=HTMLResponse)
 async def user_dashboard(username: str, request: Request):
     """User-specific dashboard showing all strategies for a user"""
     try:
+        # Check if user exists (has environment variable configured)
+        if not user_exists(username):
+            available_users = get_available_users()
+            return HTMLResponse(f"""
+            <html>
+                <head>
+                    <title>User Not Found - RetardTrader</title>
+                    <link rel="stylesheet" href="/static/style.css">
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="empty-state">
+                            <h2>User "{username}" Not Found</h2>
+                            <p>This user is not configured in the system.</p>
+                            <p>To add this user, set the environment variable:</p>
+                            <code style="background: #334155; padding: 10px; border-radius: 4px; display: block; margin: 20px 0;">
+                                SIGNAL_STACK_WEBHOOK_URL_{username.upper()}=https://your-webhook-url
+                            </code>
+                            {"<h3>Available Users:</h3>" if available_users else "<p>No users currently configured.</p>"}
+                            {"".join(f'<div style=\"margin: 10px 0;\"><a href=\"/{user}\" style=\"color: #60a5fa;\">{user}</a></div>' for user in available_users) if available_users else ""}
+                            <div style="margin-top: 30px;">
+                                <a href="/" style="color: #60a5fa; text-decoration: none;">&larr; Back to Home</a>
+                            </div>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """, status_code=404)
+        
         # Get strategies for this user
         user_strategies = strategy_repo.get_strategies_by_owner(username)
         
@@ -135,6 +256,14 @@ async def create_strategy(
 ):
     """Create a new strategy"""
     try:
+        # Validate that the owner exists (has environment variable configured)
+        if not user_exists(owner):
+            available_users = get_available_users()
+            raise HTTPException(
+                status_code=400, 
+                detail=f"User '{owner}' is not configured. Available users: {', '.join(available_users) if available_users else 'None'}"
+            )
+        
         # Clean up symbol inputs
         long_symbol = long_symbol.strip() if long_symbol and long_symbol.strip() else None
         short_symbol = short_symbol.strip() if short_symbol and short_symbol.strip() else None
@@ -143,6 +272,8 @@ async def create_strategy(
         return {"status": "success", "strategy": strategy.to_dict()}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"🔥 ERROR: create_strategy_error={str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -320,19 +451,22 @@ async def force_strategy_close(name: str, background_tasks: BackgroundTasks):
         logger.exception(f"🔥 ERROR: force_close_error={str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Legacy compatibility and utility endpoints
+# System endpoints
 @app.get("/status")
 async def status():
     """Get system status"""
     strategies = strategy_repo.get_all_strategies()
-    owners = strategy_repo.get_all_owners()
+    available_users = get_available_users()
+    users_data = get_users_from_environment()
+    
     return {
         "status": "ok",
-        "system": "multi-user",
+        "system": "environment-based-multi-user",
         "strategies": len(strategies),
-        "users": len(owners),
+        "users": len(available_users),
         "strategy_names": [s.name for s in strategies],
-        "user_names": owners
+        "user_names": available_users,
+        "configured_users": {user: "configured" for user in users_data.keys()}
     }
 
 @app.post("/debug")
