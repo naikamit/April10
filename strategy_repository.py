@@ -1,753 +1,591 @@
-// static/dashboard.js - User-Specific Dashboard JavaScript functions with Loading Avatar
+# strategy_repository.py - Strategy CRUD operations with JSON file persistence
+import threading
+import logging
+import json
+import os
+import asyncio
+from datetime import datetime
+from typing import Dict, List, Optional
+from strategy import Strategy
 
-var currentStrategy = null;
-var cooldownTimers = {}; // Store timers for each strategy
+logger = logging.getLogger(__name__)
 
-// Loading state management with avatar
-function setButtonLoading(button, loadingText) {
-    if (!button) return;
+class AsyncWriteManager:
+    """Manages background writes for API call logs to avoid blocking API responses"""
     
-    if (!loadingText) {
-        loadingText = 'Loading...';
-    }
+    def __init__(self):
+        self.write_queue = asyncio.Queue()
+        self.background_task = None
+        self.running = False
     
-    button.dataset.originalText = button.textContent;
-    button.dataset.originalHTML = button.innerHTML;
-    
-    // Create loading content with avatar (using string concatenation)
-    var loadingHTML = '<div class="loading-content">' +
-        '<img src="/static/loading-avatar.png" alt="" class="loading-avatar" onerror="this.style.display=\'none\'">' +
-        '<span>' + loadingText + '</span>' +
-        '</div>';
-    
-    button.innerHTML = loadingHTML;
-    button.disabled = true;
-    button.classList.add('loading');
-}
-
-function restoreButton(button) {
-    if (!button) return;
-    
-    var originalHTML = button.dataset.originalHTML;
-    var originalText = button.dataset.originalText;
-    
-    if (originalHTML) {
-        button.innerHTML = originalHTML;
-    } else if (originalText) {
-        button.textContent = originalText;
-    }
-    
-    button.disabled = false;
-    button.classList.remove('loading');
-    
-    // Clean up data attributes
-    delete button.dataset.originalHTML;
-    delete button.dataset.originalText;
-}
-
-// Toast notification system
-function showToast(message, type) {
-    if (!type) type = 'info';
-    
-    var container = document.getElementById('toast-container');
-    var toast = document.createElement('div');
-    toast.className = 'toast toast-' + type;
-    toast.textContent = message;
-    
-    container.appendChild(toast);
-    
-    // Trigger animation
-    setTimeout(function() {
-        toast.classList.add('show');
-    }, 100);
-    
-    // Remove toast after 5 seconds
-    setTimeout(function() {
-        toast.classList.remove('show');
-        setTimeout(function() {
-            if (container.contains(toast)) {
-                container.removeChild(toast);
-            }
-        }, 300);
-    }, 5000);
-}
-
-// Tab Management
-function switchToStrategy(strategyName) {
-    // Hide all strategy content
-    var allContent = document.querySelectorAll('.strategy-content');
-    for (var i = 0; i < allContent.length; i++) {
-        allContent[i].style.display = 'none';
-    }
-    
-    // Remove active class from all tabs
-    var allTabs = document.querySelectorAll('.tab-button:not(.tab-create)');
-    for (var j = 0; j < allTabs.length; j++) {
-        allTabs[j].classList.remove('active');
-    }
-    
-    // Show selected strategy content
-    var selectedContent = document.getElementById('strategy-' + strategyName);
-    if (selectedContent) {
-        selectedContent.style.display = 'block';
-    }
-    
-    // Add active class to selected tab
-    var selectedTab = document.querySelector('[data-strategy="' + strategyName + '"]');
-    if (selectedTab) {
-        selectedTab.classList.add('active');
-    }
-    
-    currentStrategy = strategyName;
-}
-
-// Strategy Creation
-function showCreateStrategy() {
-    document.getElementById('create-strategy-modal').style.display = 'flex';
-}
-
-function hideCreateStrategy() {
-    document.getElementById('create-strategy-modal').style.display = 'none';
-    // Clear form
-    document.getElementById('create-strategy-form').reset();
-}
-
-// Strategy Management Functions
-function updateStrategySymbols(strategyName) {
-    var strategyDiv = document.getElementById('strategy-' + strategyName);
-    var longSymbol = strategyDiv.querySelector('.long-symbol-input').value.trim();
-    var shortSymbol = strategyDiv.querySelector('.short-symbol-input').value.trim();
-    
-    var formData = new FormData();
-    formData.append('long_symbol', longSymbol);
-    formData.append('short_symbol', shortSymbol);
-    
-    // Set loading state
-    var updateButton = strategyDiv.querySelector('.symbols-form-group button');
-    setButtonLoading(updateButton, 'Updating...');
-    
-    fetch('/api/strategies/' + strategyName + '/update-symbols', {
-        method: 'POST',
-        body: formData
-    })
-    .then(function(response) {
-        return response.json();
-    })
-    .then(function(result) {
-        if (result.status === 'success') {
-            // Update the displayed symbol values
-            var symbolValues = strategyDiv.querySelectorAll('.symbol-value');
-            if (symbolValues[0]) {
-                symbolValues[0].textContent = result.strategy.long_symbol || 'Not set';
-            }
-            if (symbolValues[1]) {
-                symbolValues[1].textContent = result.strategy.short_symbol || 'Not set';
-            }
-            showToast('Symbols updated for ' + strategyName, 'success');
-        } else {
-            showToast('Error: ' + (result.detail || 'Failed to update symbols'), 'error');
-        }
-    })
-    .catch(function(error) {
-        showToast('Error updating symbols: ' + error.message, 'error');
-    })
-    .finally(function() {
-        restoreButton(updateButton);
-    });
-}
-
-function updateStrategyCash(strategyName) {
-    var strategyDiv = document.getElementById('strategy-' + strategyName);
-    var cashAmount = strategyDiv.querySelector('.cash-amount-input').value;
-    
-    if (!cashAmount) {
-        showToast('Please enter a cash amount', 'error');
-        return;
-    }
-    
-    var formData = new FormData();
-    formData.append('cash_amount', cashAmount);
-    
-    // Set loading state
-    var updateButton = strategyDiv.querySelector('.cash-section .form-group button');
-    setButtonLoading(updateButton, 'Updating...');
-    
-    fetch('/api/strategies/' + strategyName + '/update-cash', {
-        method: 'POST',
-        body: formData
-    })
-    .then(function(response) {
-        return response.json();
-    })
-    .then(function(result) {
-        if (result.status === 'success') {
-            // Update the displayed cash amount
-            var cashDisplay = strategyDiv.querySelector('.cash-amount');
-            if (cashDisplay) {
-                cashDisplay.textContent = '$' + result.strategy.cash_balance.toFixed(2);
-            }
-            
-            // Clear the input field
-            strategyDiv.querySelector('.cash-amount-input').value = '';
-            showToast('Cash balance updated for ' + strategyName, 'success');
-        } else {
-            showToast('Error: ' + (result.detail || 'Failed to update cash balance'), 'error');
-        }
-    })
-    .catch(function(error) {
-        showToast('Error updating cash: ' + error.message, 'error');
-    })
-    .finally(function() {
-        restoreButton(updateButton);
-    });
-}
-
-// Cooldown Management
-function startStrategyCooldown(strategyName) {
-    // Set loading state
-    var startButton = document.querySelector('#strategy-' + strategyName + ' .cooldown-controls button:first-child');
-    setButtonLoading(startButton, 'Starting...');
-    
-    fetch('/api/strategies/' + strategyName + '/start-cooldown', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(function(response) {
-        return response.json();
-    })
-    .then(function(result) {
-        if (result.status === 'success' && result.strategy.cooldown.active) {
-            // Update the cooldown display immediately
-            updateCooldownDisplay(strategyName, result.strategy.cooldown);
-            showToast('Cooldown started for ' + strategyName, 'success');
-        } else {
-            showToast('Error: ' + (result.detail || 'Failed to start cooldown'), 'error');
-        }
-    })
-    .catch(function(error) {
-        showToast('Error starting cooldown: ' + error.message, 'error');
-    })
-    .finally(function() {
-        restoreButton(startButton);
-    });
-}
-
-function stopStrategyCooldown(strategyName) {
-    // Set loading state
-    var stopButton = document.querySelector('#strategy-' + strategyName + ' .cooldown-controls button:last-child');
-    setButtonLoading(stopButton, 'Stopping...');
-    
-    fetch('/api/strategies/' + strategyName + '/stop-cooldown', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(function(response) {
-        return response.json();
-    })
-    .then(function(result) {
-        if (result.status === 'success') {
-            // Update the cooldown display immediately
-            updateCooldownDisplay(strategyName, { active: false });
-            showToast('Cooldown stopped for ' + strategyName, 'success');
-        } else {
-            showToast('Error: ' + (result.detail || 'Failed to stop cooldown'), 'error');
-        }
-    })
-    .catch(function(error) {
-        showToast('Error stopping cooldown: ' + error.message, 'error');
-    })
-    .finally(function() {
-        restoreButton(stopButton);
-    });
-}
-
-function updateCooldownDisplay(strategyName, cooldownData) {
-    var strategyDiv = document.getElementById('strategy-' + strategyName);
-    if (!strategyDiv) {
-        console.error('Strategy div not found: ' + strategyName);
-        return;
-    }
-    
-    var statusDiv = strategyDiv.querySelector('.cooldown-active, .cooldown-inactive');
-    if (!statusDiv) {
-        console.error('Cooldown status div not found for strategy: ' + strategyName);
-        return;
-    }
-    
-    // Clear existing timer for this strategy
-    if (cooldownTimers[strategyName]) {
-        clearInterval(cooldownTimers[strategyName]);
-        delete cooldownTimers[strategyName];
-    }
-    
-    if (cooldownData.active && cooldownData.end_time) {
-        // Show active cooldown
-        statusDiv.className = 'cooldown-active';
+    async def start(self):
+        """Start the background write worker"""
+        if self.running:
+            return
         
-        // Calculate initial time remaining
-        var endTime = new Date(cooldownData.end_time);
-        
-        // Create timer element
-        var timerElement = document.createElement('div');
-        timerElement.className = 'cooldown-timer';
-        
-        // Update function for the countdown
-        function updateTimer() {
-            var now = new Date();
-            var remaining = endTime - now;
-            
-            if (remaining <= 0) {
-                // Cooldown has expired
-                clearInterval(cooldownTimers[strategyName]);
-                delete cooldownTimers[strategyName];
-                updateCooldownDisplay(strategyName, { active: false });
-                return;
-            }
-            
-            var hours = Math.floor(remaining / (1000 * 60 * 60));
-            var minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-            var seconds = Math.floor((remaining % (1000 * 60)) / 1000);
-            
-            timerElement.textContent = 'Time remaining: ' + hours + 'h ' + minutes + 'm ' + seconds + 's';
-        }
-        
-        statusDiv.innerHTML = 
-            '<div class="cooldown-label">Cooldown Active</div>' +
-            '<div class="cooldown-end">Ends at: ' + endTime.toLocaleString() + '</div>';
-        
-        statusDiv.appendChild(timerElement);
-        
-        // Start the countdown timer
-        updateTimer(); // Update immediately
-        cooldownTimers[strategyName] = setInterval(updateTimer, 1000);
-        
-    } else {
-        // Show inactive cooldown
-        statusDiv.className = 'cooldown-inactive';
-        statusDiv.innerHTML = 
-            '<div class="cooldown-label">Cooldown Inactive</div>' +
-            '<div>Ready to process signals normally</div>';
-    }
-}
-
-// Initialize cooldown timers for existing active cooldowns
-function initializeCooldownTimers() {
-    // Find all strategy divs and check for active cooldowns
-    var strategyDivs = document.querySelectorAll('.strategy-content');
+        self.running = True
+        self.background_task = asyncio.create_task(self._background_writer())
+        logger.info("🔥 PERSISTENCE: async write manager started")
     
-    for (var i = 0; i < strategyDivs.length; i++) {
-        var strategyDiv = strategyDivs[i];
-        var strategyName = strategyDiv.id.replace('strategy-', '');
-        var cooldownStatus = strategyDiv.querySelector('.cooldown-active');
+    async def stop(self):
+        """Stop the background write worker gracefully"""
+        if not self.running:
+            return
         
-        if (cooldownStatus) {
-            // Check if there's an end time in the DOM
-            var endTimeElement = cooldownStatus.querySelector('.cooldown-end');
-            if (endTimeElement) {
-                var endTimeText = endTimeElement.textContent;
-                var endTimeMatch = endTimeText.match(/Ends at: (.+)/);
+        self.running = False
+        if self.background_task:
+            # Add a stop signal to queue
+            await self.write_queue.put(None)
+            try:
+                await asyncio.wait_for(self.background_task, timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("🔥 PERSISTENCE: background writer timeout during shutdown")
+                self.background_task.cancel()
+        
+        logger.info("🔥 PERSISTENCE: async write manager stopped")
+    
+    async def queue_api_log_write(self, strategy_name: str, api_calls: List[dict]):
+        """Queue an API log write (non-blocking)"""
+        if not self.running:
+            await self.start()
+        
+        try:
+            await self.write_queue.put(('api_log', strategy_name, api_calls.copy()))
+        except Exception as e:
+            logger.error(f"🔥 ERROR: failed to queue API log write for {strategy_name}: {str(e)}")
+    
+    async def _background_writer(self):
+        """Background coroutine that processes the write queue"""
+        logger.info("🔥 PERSISTENCE: background writer started")
+        
+        while self.running:
+            try:
+                # Wait for write tasks with timeout
+                write_task = await asyncio.wait_for(self.write_queue.get(), timeout=1.0)
                 
-                if (endTimeMatch) {
-                    var endTime = new Date(endTimeMatch[1]);
-                    // Start timer for this strategy
-                    updateCooldownDisplay(strategyName, {
-                        active: true,
-                        end_time: endTime.toISOString()
-                    });
+                # Check for stop signal
+                if write_task is None:
+                    break
+                
+                write_type, strategy_name, data = write_task
+                
+                if write_type == 'api_log':
+                    try:
+                        api_log_file = f'/app/data/api_logs/{strategy_name}.json'
+                        _atomic_write_json(data, api_log_file)
+                        logger.debug(f"🔥 PERSISTENCE: API logs written for {strategy_name}")
+                    except Exception as e:
+                        logger.error(f"🔥 ERROR: background API log write failed for {strategy_name}: {str(e)}")
+                
+            except asyncio.TimeoutError:
+                # Normal timeout, continue loop
+                continue
+            except Exception as e:
+                logger.error(f"🔥 ERROR: background writer error: {str(e)}")
+        
+        logger.info("🔥 PERSISTENCE: background writer stopped")
+
+def _ensure_data_directory():
+    """Ensure data directories exist, create if needed"""
+    try:
+        os.makedirs('/app/data', exist_ok=True)
+        os.makedirs('/app/data/api_logs', exist_ok=True)
+        return True
+    except Exception as e:
+        logger.error(f"🔥 ERROR: failed to create data directories: {str(e)}")
+        return False
+
+def _atomic_write_json(data, file_path: str):
+    """Write JSON data atomically using temp file + rename"""
+    temp_path = f"{file_path}.tmp"
+    
+    try:
+        # Ensure parent directory exists
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        
+        # Write to temp file
+        with open(temp_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        # Atomic rename (POSIX guarantees atomicity)
+        os.rename(temp_path, file_path)
+        
+    except Exception as e:
+        # Clean up temp file if it exists
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+        raise e
+
+def _load_json_file(file_path: str, default_value=None):
+    """Load JSON file with error handling and fallback"""
+    if not os.path.exists(file_path):
+        return default_value if default_value is not None else {}
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data
+    except json.JSONDecodeError as e:
+        logger.error(f"🔥 ERROR: corrupted JSON file {file_path}: {str(e)}")
+        return default_value if default_value is not None else {}
+    except Exception as e:
+        logger.error(f"🔥 ERROR: failed to read file {file_path}: {str(e)}")
+        return default_value if default_value is not None else {}
+
+class StrategyRepository:
+    """
+    Repository for managing Strategy entities with JSON file persistence.
+    Uses /app/data/strategies.json for strategy data and /app/data/api_logs/ for API call logs.
+    """
+    
+    _instance = None
+    _lock = threading.Lock()
+    
+    def __new__(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(StrategyRepository, cls).__new__(cls)
+                cls._instance._initialize()
+            return cls._instance
+    
+    def _initialize(self):
+        """Initialize the repository and load data from disk"""
+        self.strategies: Dict[str, Strategy] = {}
+        self._storage_lock = threading.Lock()
+        self._async_write_manager = AsyncWriteManager()
+        self._disk_available = False
+        
+        # Check if disk is available and load data
+        self._disk_available = _ensure_data_directory()
+        
+        if self._disk_available:
+            self._load_strategies_from_disk()
+            logger.info(f"🔥 PERSISTENCE: repository initialized with disk storage, loaded {len(self.strategies)} strategies")
+        else:
+            logger.warning("🔥 PERSISTENCE: disk not available, using memory-only mode")
+    
+    def _load_strategies_from_disk(self):
+        """Load all strategies and their API logs from disk"""
+        strategies_file = '/app/data/strategies.json'
+        
+        # Load strategy configurations
+        strategies_data = _load_json_file(strategies_file, {})
+        
+        for strategy_name, strategy_data in strategies_data.items():
+            try:
+                # Handle backward compatibility - if no owner field, use 'default'
+                owner = strategy_data.get('owner', 'default')
+                
+                # Create strategy object from saved data
+                strategy = Strategy(
+                    name=strategy_data.get('name', strategy_name),
+                    owner=owner,
+                    long_symbol=strategy_data.get('long_symbol'),
+                    short_symbol=strategy_data.get('short_symbol'),
+                    cash_balance=strategy_data.get('cash_balance', 0.0)
+                )
+                
+                # Restore timestamps
+                if 'created_at' in strategy_data:
+                    try:
+                        strategy.created_at = datetime.fromisoformat(strategy_data['created_at'].replace('Z', '+00:00'))
+                    except:
+                        pass  # Keep default if parse fails
+                
+                if 'updated_at' in strategy_data:
+                    try:
+                        strategy.updated_at = datetime.fromisoformat(strategy_data['updated_at'].replace('Z', '+00:00'))
+                    except:
+                        pass  # Keep default if parse fails
+                
+                # Restore cooldown state
+                if strategy_data.get('in_cooldown', False) and 'cooldown_end_time' in strategy_data:
+                    try:
+                        cooldown_end = datetime.fromisoformat(strategy_data['cooldown_end_time'].replace('Z', '+00:00'))
+                        if datetime.now() < cooldown_end:
+                            strategy.in_cooldown = True
+                            strategy.cooldown_end_time = cooldown_end
+                        else:
+                            # Cooldown expired, clear it
+                            strategy.in_cooldown = False
+                            strategy.cooldown_end_time = None
+                    except:
+                        # Invalid cooldown time, clear it
+                        strategy.in_cooldown = False
+                        strategy.cooldown_end_time = None
+                
+                # Load API call logs
+                api_log_file = f'/app/data/api_logs/{strategy_name}.json'
+                api_calls = _load_json_file(api_log_file, [])
+                strategy.api_calls = api_calls[-100:]  # Keep only last 100
+                
+                self.strategies[strategy_name.lower()] = strategy
+                logger.debug(f"🔥 PERSISTENCE: loaded strategy {strategy.name} (owner: {strategy.owner}) with {len(strategy.api_calls)} API calls")
+                
+            except Exception as e:
+                logger.error(f"🔥 ERROR: failed to load strategy {strategy_name}: {str(e)}")
+                continue
+    
+    def _save_strategies_to_disk(self):
+        """Save all strategy configurations to disk (synchronous)"""
+        if not self._disk_available:
+            logger.debug("🔥 PERSISTENCE: disk not available, skipping strategy save")
+            return
+        
+        strategies_file = '/app/data/strategies.json'
+        
+        try:
+            # Convert strategies to JSON-serializable format
+            strategies_data = {}
+            for strategy_name, strategy in self.strategies.items():
+                strategies_data[strategy_name] = {
+                    'name': strategy.name,
+                    'display_name': getattr(strategy, 'display_name', strategy.name),
+                    'owner': strategy.owner,
+                    'long_symbol': strategy.long_symbol,
+                    'short_symbol': strategy.short_symbol,
+                    'cash_balance': strategy.cash_balance,
+                    'in_cooldown': strategy.in_cooldown,
+                    'cooldown_end_time': strategy.cooldown_end_time.isoformat() if strategy.cooldown_end_time else None,
+                    'created_at': strategy.created_at.isoformat(),
+                    'updated_at': strategy.updated_at.isoformat()
                 }
-            }
-        }
-    }
-}
-
-// Helper function to get strategy symbols
-function getStrategySymbols(strategyName) {
-    var strategyDiv = document.getElementById('strategy-' + strategyName);
-    var symbolValues = strategyDiv.querySelectorAll('.symbol-value');
-    var longSymbol = symbolValues[0] ? symbolValues[0].textContent.trim() : 'Not set';
-    var shortSymbol = symbolValues[1] ? symbolValues[1].textContent.trim() : 'Not set';
-    
-    return {
-        long: longSymbol !== 'Not set' ? longSymbol : null,
-        short: shortSymbol !== 'Not set' ? shortSymbol : null
-    };
-}
-
-// Manual Trading Functions
-function forceStrategyLong(strategyName) {
-    var symbols = getStrategySymbols(strategyName);
-    
-    var message = 'Are you sure you want to force a LONG position for ' + strategyName + '?\n\n';
-    message += 'This will:\n';
-    
-    if (symbols.short) {
-        message += '• Close any ' + symbols.short + ' positions\n';
-    } else {
-        message += '• Close any short positions\n';
-    }
-    
-    if (symbols.long) {
-        message += '• Buy ' + symbols.long + '\n';
-    } else {
-        message += '• Buy the long symbol\n';
-    }
-    
-    message += '• Bypass cooldown periods\n\n';
-    message += 'Click OK to proceed.';
-    
-    var confirmed = confirm(message);
-    
-    if (!confirmed) {
-        return;
-    }
-    
-    var button = document.querySelector('#strategy-' + strategyName + ' .force-long');
-    setButtonLoading(button, 'Processing...');
-    
-    fetch('/api/strategies/' + strategyName + '/force-long', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(function(response) {
-        return response.json();
-    })
-    .then(function(result) {
-        if (result.status === 'success') {
-            showToast('Force Long executed for ' + strategyName, 'success');
-        } else {
-            showToast('Error: ' + (result.message || 'Unknown error'), 'error');
-        }
-    })
-    .catch(function(error) {
-        showToast('Error executing Force Long: ' + error.message, 'error');
-    })
-    .finally(function() {
-        restoreButton(button);
-    });
-}
-
-function forceStrategyShort(strategyName) {
-    var symbols = getStrategySymbols(strategyName);
-    
-    var message = 'Are you sure you want to force a SHORT position for ' + strategyName + '?\n\n';
-    message += 'This will:\n';
-    
-    if (symbols.long) {
-        message += '• Close any ' + symbols.long + ' positions\n';
-    } else {
-        message += '• Close any long positions\n';
-    }
-    
-    if (symbols.short) {
-        message += '• Buy ' + symbols.short + '\n';
-    } else {
-        message += '• Buy the short symbol\n';
-    }
-    
-    message += '• Bypass cooldown periods\n\n';
-    message += 'Click OK to proceed.';
-    
-    var confirmed = confirm(message);
-    
-    if (!confirmed) {
-        return;
-    }
-    
-    var button = document.querySelector('#strategy-' + strategyName + ' .force-short');
-    setButtonLoading(button, 'Processing...');
-    
-    fetch('/api/strategies/' + strategyName + '/force-short', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(function(response) {
-        return response.json();
-    })
-    .then(function(result) {
-        if (result.status === 'success') {
-            showToast('Force Short executed for ' + strategyName, 'success');
-        } else {
-            showToast('Error: ' + (result.message || 'Unknown error'), 'error');
-        }
-    })
-    .catch(function(error) {
-        showToast('Error executing Force Short: ' + error.message, 'error');
-    })
-    .finally(function() {
-        restoreButton(button);
-    });
-}
-
-function forceStrategyClose(strategyName) {
-    var symbols = getStrategySymbols(strategyName);
-    
-    var message = 'Are you sure you want to FORCE CLOSE ALL positions for ' + strategyName + '?\n\n';
-    message += 'This will:\n';
-    
-    if (symbols.long) {
-        message += '• Close ALL ' + symbols.long + ' positions\n';
-    } else {
-        message += '• Close ALL long positions\n';
-    }
-    
-    if (symbols.short) {
-        message += '• Close ALL ' + symbols.short + ' positions\n';
-    } else {
-        message += '• Close ALL short positions\n';
-    }
-    
-    message += '• Bypass cooldown periods\n\n';
-    message += 'This action affects BOTH symbols for this strategy!';
-    
-    var confirmed = confirm(message);
-    
-    if (!confirmed) {
-        return;
-    }
-    
-    // Double confirmation for close all
-    var doubleConfirmed = confirm(
-        'FINAL CONFIRMATION:\n\n' +
-        'You are about to close ALL positions for strategy "' + strategyName + '".\n\n' +
-        'Are you absolutely sure?'
-    );
-    
-    if (!doubleConfirmed) {
-        return;
-    }
-    
-    var button = document.querySelector('#strategy-' + strategyName + ' .force-close');
-    setButtonLoading(button, 'Processing...');
-    
-    fetch('/api/strategies/' + strategyName + '/force-close', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(function(response) {
-        return response.json();
-    })
-    .then(function(result) {
-        if (result.status === 'success') {
-            showToast('Force Close executed for ' + strategyName + ' - All positions closed', 'success');
-        } else {
-            showToast('Error: ' + (result.message || 'Unknown error'), 'error');
-        }
-    })
-    .catch(function(error) {
-        showToast('Error executing Force Close: ' + error.message, 'error');
-    })
-    .finally(function() {
-        restoreButton(button);
-    });
-}
-
-// Strategy Deletion
-function deleteStrategy(strategyName) {
-    var confirmed = confirm(
-        'Are you sure you want to DELETE strategy "' + strategyName + '"?\n\n' +
-        'This will permanently remove:\n' +
-        '• All strategy configuration\n' +
-        '• Cash balance information\n' +
-        '• API call history\n' +
-        '• Webhook URLs will stop working\n\n' +
-        'This action CANNOT be undone!'
-    );
-    
-    if (!confirmed) {
-        return;
-    }
-    
-    // Double confirmation for deletion
-    var doubleConfirmed = confirm(
-        'FINAL CONFIRMATION:\n\n' +
-        'Type the strategy name to confirm deletion: "' + strategyName + '"\n\n' +
-        'Are you absolutely sure you want to delete this strategy?'
-    );
-    
-    if (!doubleConfirmed) {
-        return;
-    }
-    
-    var button = document.querySelector('#strategy-' + strategyName + ' .delete-strategy-btn');
-    setButtonLoading(button, 'Deleting...');
-    
-    fetch('/api/strategies/' + strategyName, {
-        method: 'DELETE'
-    })
-    .then(function(response) {
-        return response.json();
-    })
-    .then(function(result) {
-        if (result.status === 'success') {
-            showToast('Strategy "' + strategyName + '" deleted successfully', 'success');
-            // Reload page to remove the deleted strategy
-            setTimeout(function() {
-                window.location.reload();
-            }, 1000);
-        } else {
-            showToast('Error: ' + (result.detail || 'Failed to delete strategy'), 'error');
-        }
-    })
-    .catch(function(error) {
-        showToast('Error deleting strategy: ' + error.message, 'error');
-    })
-    .finally(function() {
-        restoreButton(button);
-    });
-}
-
-// Utility Functions
-function copyToClipboard(inputId) {
-    var input = document.getElementById(inputId);
-    input.select();
-    input.setSelectionRange(0, 99999); // For mobile devices
-    
-    try {
-        document.execCommand('copy');
-        showToast('URL copied to clipboard!', 'success');
-    } catch (err) {
-        // Fallback for modern browsers
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(input.value).then(function() {
-                showToast('URL copied to clipboard!', 'success');
-            }).catch(function() {
-                showToast('Failed to copy URL', 'error');
-            });
-        } else {
-            showToast('Copy not supported', 'error');
-        }
-    }
-}
-
-// Handle strategy creation form submission
-function setupCreateStrategyForm() {
-    var createForm = document.getElementById('create-strategy-form');
-    if (createForm) {
-        createForm.addEventListener('submit', function(e) {
-            e.preventDefault();
             
-            var name = document.getElementById('strategy-name').value.trim();
-            var owner = document.getElementById('strategy-owner').value.trim();
-            var longSymbol = document.getElementById('strategy-long-symbol').value.trim();
-            var shortSymbol = document.getElementById('strategy-short-symbol').value.trim();
-            var cash = parseFloat(document.getElementById('strategy-cash').value) || 0;
+            _atomic_write_json(strategies_data, strategies_file)
+            logger.debug(f"🔥 PERSISTENCE: saved {len(strategies_data)} strategies to disk")
             
-            if (!name) {
-                showToast('Strategy name is required', 'error');
-                return;
-            }
-            
-            if (!owner) {
-                showToast('Owner is required', 'error');
-                return;
-            }
-            
-            // Validate strategy name
-            if (!/^[a-zA-Z0-9_]{3,50}$/.test(name)) {
-                showToast('Strategy name must be 3-50 characters, alphanumeric and underscores only', 'error');
-                return;
-            }
-            
-            var formData = new FormData();
-            formData.append('name', name);
-            formData.append('owner', owner);
-            if (longSymbol) formData.append('long_symbol', longSymbol);
-            if (shortSymbol) formData.append('short_symbol', shortSymbol);
-            formData.append('cash_balance', cash);
-            
-            // Set loading state
-            var submitButton = e.target.querySelector('button[type="submit"]');
-            setButtonLoading(submitButton, 'Creating...');
-            
-            fetch('/api/strategies', {
-                method: 'POST',
-                body: formData
-            })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(result) {
-                if (result.status === 'success') {
-                    showToast('Strategy "' + name + '" created successfully!', 'success');
-                    hideCreateStrategy();
-                    // Reload page to show new strategy
-                    setTimeout(function() {
-                        window.location.reload();
-                    }, 1000);
-                } else {
-                    showToast('Error: ' + (result.detail || 'Failed to create strategy'), 'error');
-                }
-            })
-            .catch(function(error) {
-                showToast('Error creating strategy: ' + error.message, 'error');
-            })
-            .finally(function() {
-                restoreButton(submitButton);
-            });
-        });
-    }
-}
-
-// Handle Enter key in form inputs
-document.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        var target = e.target;
+        except Exception as e:
+            logger.error(f"🔥 ERROR: failed to save strategies to disk: {str(e)}")
+    
+    async def _save_api_logs_async(self, strategy_name: str, api_calls: List[dict]):
+        """Save API logs asynchronously (non-blocking)"""
+        if not self._disk_available:
+            return
         
-        // Strategy creation form
-        if (target.closest('#create-strategy-form')) {
-            e.preventDefault();
-            var submitEvent = new Event('submit');
-            document.getElementById('create-strategy-form').dispatchEvent(submitEvent);
-            return;
+        await self._async_write_manager.queue_api_log_write(strategy_name, api_calls)
+    
+    def create_strategy(self, name: str, owner: str, long_symbol: Optional[str] = None, 
+                       short_symbol: Optional[str] = None, cash_balance: float = 0.0) -> Strategy:
+        """
+        Create a new strategy with immediate disk persistence
+        
+        Args:
+            name: URL-safe strategy name
+            owner: Username who owns this strategy
+            long_symbol: Symbol for long signals (optional)
+            short_symbol: Symbol for short signals (optional)
+            cash_balance: Initial cash balance
+            
+        Returns:
+            Created Strategy instance
+            
+        Raises:
+            ValueError: If strategy name is invalid or already exists
+        """
+        normalized_name = name.lower()
+        
+        with self._storage_lock:
+            if normalized_name in self.strategies:
+                raise ValueError(f"Strategy '{name}' already exists")
+            
+            # Create strategy object
+            strategy = Strategy(name, owner, long_symbol, short_symbol, cash_balance)
+            
+            # Add to memory
+            self.strategies[normalized_name] = strategy
+            
+            # Save to disk immediately (blocking for data integrity)
+            self._save_strategies_to_disk()
+            
+            # Create empty API log file
+            if self._disk_available:
+                try:
+                    api_log_file = f'/app/data/api_logs/{normalized_name}.json'
+                    _atomic_write_json([], api_log_file)
+                except Exception as e:
+                    logger.error(f"🔥 ERROR: failed to create API log file for {name}: {str(e)}")
+            
+            logger.info(f"🔥 STRATEGY CREATED: name={strategy.name} owner={strategy.owner} display_name={getattr(strategy, 'display_name', strategy.name)} "
+                       f"long={strategy.long_symbol} short={strategy.short_symbol} cash={strategy.cash_balance}")
+            
+            return strategy
+    
+    def get_strategy(self, name: str) -> Optional[Strategy]:
+        """
+        Get a strategy by name (from memory)
+        
+        Args:
+            name: Strategy name (case insensitive)
+            
+        Returns:
+            Strategy instance or None if not found
+        """
+        normalized_name = name.lower()
+        
+        with self._storage_lock:
+            strategy = self.strategies.get(normalized_name)
+            if strategy and not hasattr(strategy, 'display_name'):
+                strategy.display_name = strategy.name
+                logger.debug(f"🔥 STRATEGY MIGRATION: added display_name to {strategy.name}")
+            return strategy
+    
+    def get_all_strategies(self) -> List[Strategy]:
+        """
+        Get all strategies ordered by creation date (from memory)
+        
+        Returns:
+            List of all Strategy instances ordered by creation_at
+        """
+        with self._storage_lock:
+            strategies = list(self.strategies.values())
+            # Sort by creation date as per PRD
+            strategies.sort(key=lambda s: s.created_at)
+            return strategies
+    
+    def get_strategies_by_owner(self, owner: str) -> List[Strategy]:
+        """
+        Get all strategies for a specific owner ordered by creation date
+        
+        Args:
+            owner: Username to filter by
+            
+        Returns:
+            List of Strategy instances for that owner ordered by creation_at
+        """
+        normalized_owner = owner.lower()
+        
+        with self._storage_lock:
+            strategies = [s for s in self.strategies.values() if s.owner == normalized_owner]
+            # Sort by creation date
+            strategies.sort(key=lambda s: s.created_at)
+            return strategies
+    
+    def get_all_owners(self) -> List[str]:
+        """
+        Get list of all unique strategy owners
+        
+        Returns:
+            List of unique owner usernames
+        """
+        with self._storage_lock:
+            owners = set(s.owner for s in self.strategies.values())
+            return sorted(list(owners))
+    
+    def update_strategy(self, name: str, long_symbol: Optional[str] = None,
+                       short_symbol: Optional[str] = None, cash_balance: Optional[float] = None) -> Optional[Strategy]:
+        """
+        Update an existing strategy with immediate disk persistence
+        
+        Args:
+            name: Strategy name
+            long_symbol: New long symbol (if provided)
+            short_symbol: New short symbol (if provided)
+            cash_balance: New cash balance (if provided)
+            
+        Returns:
+            Updated Strategy instance or None if not found
+        """
+        normalized_name = name.lower()
+        
+        with self._storage_lock:
+            strategy = self.strategies.get(normalized_name)
+            if not strategy:
+                return None
+            
+            # Track what's being updated for logging
+            updates = []
+            
+            if long_symbol is not None:
+                old_long = strategy.long_symbol
+                strategy.update_symbols(long_symbol=long_symbol)
+                updates.append(f"long_symbol: {old_long} -> {strategy.long_symbol}")
+            
+            if short_symbol is not None:
+                old_short = strategy.short_symbol
+                strategy.update_symbols(short_symbol=short_symbol)
+                updates.append(f"short_symbol: {old_short} -> {strategy.short_symbol}")
+            
+            if cash_balance is not None:
+                old_cash = strategy.cash_balance
+                strategy.update_cash_balance(cash_balance)
+                updates.append(f"cash_balance: {old_cash} -> {strategy.cash_balance}")
+            
+            if updates:
+                # Save to disk immediately (blocking for data integrity)
+                self._save_strategies_to_disk()
+                logger.info(f"🔥 STRATEGY UPDATED: name={strategy.name} owner={strategy.owner} changes={', '.join(updates)}")
+            
+            return strategy
+    
+    def update_strategy_symbols_both(self, name: str, long_symbol: Optional[str], short_symbol: Optional[str]) -> Optional[Strategy]:
+        """
+        Update both symbols for a strategy (used by update-symbols endpoint)
+        Always updates both symbols regardless of None values
+        
+        Args:
+            name: Strategy name
+            long_symbol: New long symbol (can be None to clear)
+            short_symbol: New short symbol (can be None to clear)
+            
+        Returns:
+            Updated Strategy instance or None if not found
+        """
+        normalized_name = name.lower()
+        
+        with self._storage_lock:
+            strategy = self.strategies.get(normalized_name)
+            if not strategy:
+                return None
+            
+            # Track what's being updated for logging
+            updates = []
+            
+            # Always update both symbols directly (bypass conditional logic)
+            old_long = strategy.long_symbol
+            old_short = strategy.short_symbol
+            
+            # Set symbols directly to force update (even to None)
+            strategy.long_symbol = long_symbol
+            strategy.short_symbol = short_symbol
+            strategy.updated_at = datetime.now()
+            
+            updates.append(f"long_symbol: {old_long} -> {strategy.long_symbol}")
+            updates.append(f"short_symbol: {old_short} -> {strategy.short_symbol}")
+            
+            # Save to disk immediately (blocking for data integrity)
+            self._save_strategies_to_disk()
+            logger.info(f"🔥 STRATEGY UPDATED: name={strategy.name} owner={strategy.owner} changes={', '.join(updates)}")
+            
+            return strategy
+    
+    def delete_strategy(self, name: str) -> bool:
+        """
+        Delete a strategy with immediate disk persistence
+        
+        Args:
+            name: Strategy name
+            
+        Returns:
+            True if strategy was deleted, False if not found
+        """
+        normalized_name = name.lower()
+        
+        with self._storage_lock:
+            if normalized_name in self.strategies:
+                strategy = self.strategies.pop(normalized_name)
+                
+                # Save to disk immediately (blocking for data integrity)
+                self._save_strategies_to_disk()
+                
+                # Delete API log file
+                if self._disk_available:
+                    try:
+                        api_log_file = f'/app/data/api_logs/{normalized_name}.json'
+                        if os.path.exists(api_log_file):
+                            os.remove(api_log_file)
+                    except Exception as e:
+                        logger.error(f"🔥 ERROR: failed to delete API log file for {name}: {str(e)}")
+                
+                logger.info(f"🔥 STRATEGY DELETED: name={strategy.name} owner={strategy.owner} display_name={getattr(strategy, 'display_name', strategy.name)}")
+                return True
+            return False
+    
+    def strategy_exists(self, name: str) -> bool:
+        """
+        Check if a strategy exists (from memory)
+        
+        Args:
+            name: Strategy name (case insensitive)
+            
+        Returns:
+            True if strategy exists, False otherwise
+        """
+        normalized_name = name.lower()
+        with self._storage_lock:
+            return normalized_name in self.strategies
+    
+    def get_strategy_names(self) -> List[str]:
+        """
+        Get list of all strategy names (from memory)
+        
+        Returns:
+            List of strategy names (lowercase)
+        """
+        with self._storage_lock:
+            return list(self.strategies.keys())
+    
+    async def add_api_call_async(self, strategy: Strategy, request: dict, response: dict, timestamp: Optional[datetime] = None):
+        """
+        Add API call to strategy's history with async disk write
+        
+        Args:
+            strategy: Strategy instance
+            request: API request data
+            response: API response data
+            timestamp: Optional timestamp (defaults to now)
+        """
+        if timestamp is None:
+            timestamp = datetime.now()
+        
+        # Add to memory immediately
+        api_call_entry = {
+            "request": request,
+            "response": response,
+            "timestamp": timestamp.isoformat()
         }
         
-        // Symbol update inputs
-        if (target.classList.contains('long-symbol-input') || target.classList.contains('short-symbol-input')) {
-            e.preventDefault();
-            var strategyDiv = target.closest('.strategy-content');
-            var strategyName = strategyDiv.id.replace('strategy-', '');
-            updateStrategySymbols(strategyName);
-            return;
+        strategy.api_calls.append(api_call_entry)
+        
+        # Keep only the last 100 API calls per strategy
+        if len(strategy.api_calls) > 100:
+            strategy.api_calls.pop(0)
+        
+        # Queue background write (non-blocking)
+        await self._save_api_logs_async(strategy.name, strategy.api_calls)
+    
+    def add_api_call_sync(self, strategy: Strategy, request: dict, response: dict, timestamp: Optional[datetime] = None):
+        """
+        Synchronous wrapper for add_api_call_async for backwards compatibility
+        
+        Args:
+            strategy: Strategy instance
+            request: API request data
+            response: API response data
+            timestamp: Optional timestamp (defaults to now)
+        """
+        if timestamp is None:
+            timestamp = datetime.now()
+        
+        # Add to memory immediately
+        api_call_entry = {
+            "request": request,
+            "response": response,
+            "timestamp": timestamp.isoformat()
         }
         
-        // Cash update inputs
-        if (target.classList.contains('cash-amount-input')) {
-            e.preventDefault();
-            var strategyDiv = target.closest('.strategy-content');
-            var strategyName = strategyDiv.id.replace('strategy-', '');
-            updateStrategyCash(strategyName);
-            return;
-        }
-    }
-});
-
-// Close modal when clicking outside
-document.addEventListener('click', function(e) {
-    var modal = document.getElementById('create-strategy-modal');
-    if (e.target === modal) {
-        hideCreateStrategy();
-    }
-});
-
-// ESC key to close modal
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        hideCreateStrategy();
-    }
-});
-
-// Initialize everything when page loads
-document.addEventListener('DOMContentLoaded', function() {
-    setupCreateStrategyForm();
-    initializeCooldownTimers();
-});
+        strategy.api_calls.append(api_call_entry)
+        
+        # Keep only the last 100 API calls per strategy
+        if len(strategy.api_calls) > 100:
+            strategy.api_calls.pop(0)
+        
+        # For sync calls, we'll start a task if event loop is available
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Create task for background write
+                loop.create_task(self._save_api_logs_async(strategy.name, strategy.api_calls))
+            else:
+                # No event loop running, skip async write
+                logger.debug("🔥 PERSISTENCE: no event loop available for async API log write")
+        except RuntimeError:
+            # No event loop available, skip async write
+            logger.debug("🔥 PERSISTENCE: no event loop available for async API log write")
+    
+    async def shutdown(self):
+        """Gracefully shutdown the repository and background workers"""
+        logger.info("🔥 PERSISTENCE: shutting down repository")
+        await self._async_write_manager.stop()
