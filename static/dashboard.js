@@ -1,9 +1,9 @@
-// static/dashboard.js - Multi-Strategy Dashboard JavaScript functions with Loading Avatar (CORRECTED)
+// static/dashboard.js - Multi-Strategy Dashboard JavaScript functions - Updated for environment-based user management
 
 var currentStrategy = null;
 var cooldownTimers = {}; // Store timers for each strategy
 
-// Loading state management with avatar (CORRECTED)
+// Loading state management with avatar
 function setButtonLoading(button, loadingText) {
     if (!button) return;
     
@@ -72,6 +72,12 @@ function showToast(message, type) {
     }, 5000);
 }
 
+// User selection function
+function changeUser(userId) {
+    // Redirect to filtered view
+    window.location.href = userId ? '/?user_id=' + userId : '/';
+}
+
 // Tab Management
 function switchToStrategy(strategyName) {
     // Hide all strategy content
@@ -112,13 +118,49 @@ function hideCreateStrategy() {
     document.getElementById('create-strategy-form').reset();
 }
 
+// System management functions
+function refreshUsers() {
+    var refreshButton = document.getElementById('refresh-users-btn');
+    if (refreshButton) {
+        setButtonLoading(refreshButton, 'Refreshing...');
+    }
+    
+    fetch('/system/refresh-users', {
+        method: 'POST'
+    })
+    .then(function(response) {
+        return response.json();
+    })
+    .then(function(result) {
+        if (result.status === 'success') {
+            showToast('Users refreshed from environment variables', 'success');
+            // Reload page to show updated users
+            setTimeout(function() {
+                window.location.reload();
+            }, 1000);
+        } else {
+            showToast('Error: ' + (result.detail || 'Failed to refresh users'), 'error');
+        }
+    })
+    .catch(function(error) {
+        showToast('Error refreshing users: ' + error.message, 'error');
+    })
+    .finally(function() {
+        if (refreshButton) {
+            restoreButton(refreshButton);
+        }
+    });
+}
+
 // Strategy Management Functions
 function updateStrategySymbols(strategyName) {
     var strategyDiv = document.getElementById('strategy-' + strategyName);
     var longSymbol = strategyDiv.querySelector('.long-symbol-input').value.trim();
     var shortSymbol = strategyDiv.querySelector('.short-symbol-input').value.trim();
+    var userId = strategyDiv.getAttribute('data-user-id') || 'default';
     
     var formData = new FormData();
+    formData.append('user_id', userId);
     formData.append('long_symbol', longSymbol);
     formData.append('short_symbol', shortSymbol);
     
@@ -159,6 +201,7 @@ function updateStrategySymbols(strategyName) {
 function updateStrategyCash(strategyName) {
     var strategyDiv = document.getElementById('strategy-' + strategyName);
     var cashAmount = strategyDiv.querySelector('.cash-amount-input').value;
+    var userId = strategyDiv.getAttribute('data-user-id') || 'default';
     
     if (!cashAmount) {
         showToast('Please enter a cash amount', 'error');
@@ -167,6 +210,7 @@ function updateStrategyCash(strategyName) {
     
     var formData = new FormData();
     formData.append('cash_amount', cashAmount);
+    formData.append('user_id', userId);
     
     // Set loading state
     var updateButton = strategyDiv.querySelector('.cash-section .form-group button');
@@ -204,15 +248,19 @@ function updateStrategyCash(strategyName) {
 
 // Cooldown Management
 function startStrategyCooldown(strategyName) {
+    var strategyDiv = document.getElementById('strategy-' + strategyName);
+    var userId = strategyDiv.getAttribute('data-user-id') || 'default';
+    
     // Set loading state
     var startButton = document.querySelector('#strategy-' + strategyName + ' .cooldown-controls button:first-child');
     setButtonLoading(startButton, 'Starting...');
     
+    var formData = new FormData();
+    formData.append('user_id', userId);
+    
     fetch('/strategies/' + strategyName + '/start-cooldown', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
+        body: formData
     })
     .then(function(response) {
         return response.json();
@@ -235,15 +283,19 @@ function startStrategyCooldown(strategyName) {
 }
 
 function stopStrategyCooldown(strategyName) {
+    var strategyDiv = document.getElementById('strategy-' + strategyName);
+    var userId = strategyDiv.getAttribute('data-user-id') || 'default';
+    
     // Set loading state
     var stopButton = document.querySelector('#strategy-' + strategyName + ' .cooldown-controls button:last-child');
     setButtonLoading(stopButton, 'Stopping...');
     
+    var formData = new FormData();
+    formData.append('user_id', userId);
+    
     fetch('/strategies/' + strategyName + '/stop-cooldown', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
+        body: formData
     })
     .then(function(response) {
         return response.json();
@@ -379,9 +431,11 @@ function getStrategySymbols(strategyName) {
 
 // Manual Trading Functions
 function forceStrategyLong(strategyName) {
+    var strategyDiv = document.getElementById('strategy-' + strategyName);
+    var userId = strategyDiv.getAttribute('data-user-id') || 'default';
     var symbols = getStrategySymbols(strategyName);
     
-    var message = 'Are you sure you want to force a LONG position for ' + strategyName + '?\n\n';
+    var message = 'Are you sure you want to force a LONG position for user "' + userId + '" strategy "' + strategyName + '"?\n\n';
     message += 'This will:\n';
     
     if (symbols.short) {
@@ -408,18 +462,19 @@ function forceStrategyLong(strategyName) {
     var button = document.querySelector('#strategy-' + strategyName + ' .force-long');
     setButtonLoading(button, 'Processing...');
     
+    var formData = new FormData();
+    formData.append('user_id', userId);
+    
     fetch('/strategies/' + strategyName + '/force-long', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
+        body: formData
     })
     .then(function(response) {
         return response.json();
     })
     .then(function(result) {
         if (result.status === 'success') {
-            showToast('Force Long executed for ' + strategyName, 'success');
+            showToast('Force Long executed for user "' + userId + '" strategy "' + strategyName + '"', 'success');
         } else {
             showToast('Error: ' + (result.message || 'Unknown error'), 'error');
         }
@@ -433,9 +488,11 @@ function forceStrategyLong(strategyName) {
 }
 
 function forceStrategyShort(strategyName) {
+    var strategyDiv = document.getElementById('strategy-' + strategyName);
+    var userId = strategyDiv.getAttribute('data-user-id') || 'default';
     var symbols = getStrategySymbols(strategyName);
     
-    var message = 'Are you sure you want to force a SHORT position for ' + strategyName + '?\n\n';
+    var message = 'Are you sure you want to force a SHORT position for user "' + userId + '" strategy "' + strategyName + '"?\n\n';
     message += 'This will:\n';
     
     if (symbols.long) {
@@ -462,18 +519,19 @@ function forceStrategyShort(strategyName) {
     var button = document.querySelector('#strategy-' + strategyName + ' .force-short');
     setButtonLoading(button, 'Processing...');
     
+    var formData = new FormData();
+    formData.append('user_id', userId);
+    
     fetch('/strategies/' + strategyName + '/force-short', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
+        body: formData
     })
     .then(function(response) {
         return response.json();
     })
     .then(function(result) {
         if (result.status === 'success') {
-            showToast('Force Short executed for ' + strategyName, 'success');
+            showToast('Force Short executed for user "' + userId + '" strategy "' + strategyName + '"', 'success');
         } else {
             showToast('Error: ' + (result.message || 'Unknown error'), 'error');
         }
@@ -487,9 +545,11 @@ function forceStrategyShort(strategyName) {
 }
 
 function forceStrategyClose(strategyName) {
+    var strategyDiv = document.getElementById('strategy-' + strategyName);
+    var userId = strategyDiv.getAttribute('data-user-id') || 'default';
     var symbols = getStrategySymbols(strategyName);
     
-    var message = 'Are you sure you want to FORCE CLOSE ALL positions for ' + strategyName + '?\n\n';
+    var message = 'Are you sure you want to FORCE CLOSE ALL positions for user "' + userId + '" strategy "' + strategyName + '"?\n\n';
     message += 'This will:\n';
     
     if (symbols.long) {
@@ -516,7 +576,7 @@ function forceStrategyClose(strategyName) {
     // Double confirmation for close all
     var doubleConfirmed = confirm(
         'FINAL CONFIRMATION:\n\n' +
-        'You are about to close ALL positions for strategy "' + strategyName + '".\n\n' +
+        'You are about to close ALL positions for user "' + userId + '" strategy "' + strategyName + '".\n\n' +
         'Are you absolutely sure?'
     );
     
@@ -527,18 +587,19 @@ function forceStrategyClose(strategyName) {
     var button = document.querySelector('#strategy-' + strategyName + ' .force-close');
     setButtonLoading(button, 'Processing...');
     
+    var formData = new FormData();
+    formData.append('user_id', userId);
+    
     fetch('/strategies/' + strategyName + '/force-close', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
+        body: formData
     })
     .then(function(response) {
         return response.json();
     })
     .then(function(result) {
         if (result.status === 'success') {
-            showToast('Force Close executed for ' + strategyName + ' - All positions closed', 'success');
+            showToast('Force Close executed for user "' + userId + '" strategy "' + strategyName + '" - All positions closed', 'success');
         } else {
             showToast('Error: ' + (result.message || 'Unknown error'), 'error');
         }
@@ -553,8 +614,11 @@ function forceStrategyClose(strategyName) {
 
 // Strategy Deletion
 function deleteStrategy(strategyName) {
+    var strategyDiv = document.getElementById('strategy-' + strategyName);
+    var userId = strategyDiv.getAttribute('data-user-id') || 'default';
+    
     var confirmed = confirm(
-        'Are you sure you want to DELETE strategy "' + strategyName + '"?\n\n' +
+        'Are you sure you want to DELETE user "' + userId + '" strategy "' + strategyName + '"?\n\n' +
         'This will permanently remove:\n' +
         '• All strategy configuration\n' +
         '• Cash balance information\n' +
@@ -581,7 +645,7 @@ function deleteStrategy(strategyName) {
     var button = document.querySelector('#strategy-' + strategyName + ' .delete-strategy-btn');
     setButtonLoading(button, 'Deleting...');
     
-    fetch('/strategies/' + strategyName, {
+    fetch('/strategies/' + strategyName + '?user_id=' + encodeURIComponent(userId), {
         method: 'DELETE'
     })
     .then(function(response) {
@@ -589,7 +653,7 @@ function deleteStrategy(strategyName) {
     })
     .then(function(result) {
         if (result.status === 'success') {
-            showToast('Strategy "' + strategyName + '" deleted successfully', 'success');
+            showToast('Strategy "' + strategyName + '" for user "' + userId + '" deleted successfully', 'success');
             // Reload page to remove the deleted strategy
             setTimeout(function() {
                 window.location.reload();
@@ -637,6 +701,7 @@ function setupCreateStrategyForm() {
             e.preventDefault();
             
             var name = document.getElementById('strategy-name').value.trim();
+            var userId = document.getElementById('strategy-user-id').value;
             var longSymbol = document.getElementById('strategy-long-symbol').value.trim();
             var shortSymbol = document.getElementById('strategy-short-symbol').value.trim();
             var cash = parseFloat(document.getElementById('strategy-cash').value) || 0;
@@ -654,6 +719,7 @@ function setupCreateStrategyForm() {
             
             var formData = new FormData();
             formData.append('name', name);
+            formData.append('user_id', userId);
             if (longSymbol) formData.append('long_symbol', longSymbol);
             if (shortSymbol) formData.append('short_symbol', shortSymbol);
             formData.append('cash_balance', cash);
@@ -671,7 +737,7 @@ function setupCreateStrategyForm() {
             })
             .then(function(result) {
                 if (result.status === 'success') {
-                    showToast('Strategy "' + name + '" created successfully!', 'success');
+                    showToast('Strategy "' + name + '" created successfully for user "' + userId + '"!', 'success');
                     hideCreateStrategy();
                     // Reload page to show new strategy
                     setTimeout(function() {
@@ -743,4 +809,10 @@ document.addEventListener('keydown', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     setupCreateStrategyForm();
     initializeCooldownTimers();
+    
+    // Add refresh users button handler if it exists
+    var refreshUsersBtn = document.getElementById('refresh-users-btn');
+    if (refreshUsersBtn) {
+        refreshUsersBtn.addEventListener('click', refreshUsers);
+    }
 });
