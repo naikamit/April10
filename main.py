@@ -1,4 +1,4 @@
-# main.py - Entry point, FastAPI setup (environment-based multi-user with new webhook structure)
+# main.py - Entry point, FastAPI setup (environment-based multi-user with fixed strategy keying)
 import logging
 import os
 import asyncio
@@ -42,6 +42,7 @@ async def lifespan(app):
     logger.info(f"🔥 SYSTEM STARTUP: Environment-Based Multi-User Trading Webhook Service")
     logger.info(f"🔥 AVAILABLE USERS: {', '.join(available_users) if available_users else 'None configured'}")
     logger.info(f"🔥 WEBHOOK STRUCTURE: User-specific: /{{username}}/{{strategy}}/{{signal}} | Broadcast: /cast/{{strategy}}/{{signal}}")
+    logger.info(f"🔥 MULTI-USER SUPPORT: Multiple users can now have strategies with identical names")
     yield
     # Shutdown event
     logger.info("🔥 SYSTEM SHUTDOWN: Environment-Based Multi-User Trading Webhook Service")
@@ -146,16 +147,13 @@ async def _process_broadcast_webhook(strategy_name: str, signal: str, request: R
         # Get all strategies with this name across all users
         strategies = strategy_repo.get_strategies_by_name(strategy_name)
         if not strategies:
-            all_strategy_names = set()
-            all_strategies = strategy_repo.get_all_strategies()
-            for s in all_strategies:
-                all_strategy_names.add(s.name)
+            all_strategy_names = strategy_repo.get_strategy_names()
             
             error_response = {
                 "status": "error",
                 "error_type": "strategy_not_found", 
                 "message": f"No strategies named '{strategy_name}' found across any users",
-                "available_strategies": sorted(list(all_strategy_names)),
+                "available_strategies": all_strategy_names,
                 "help": "Create strategies with this name first or check the strategy name in your webhook URL"
             }
             logger.error(f"🔥 ERROR: broadcast strategy={strategy_name} not_found webhook_ignored")
@@ -405,7 +403,7 @@ async def list_strategies():
 
 @app.get("/api/strategies/{name}")
 async def get_strategy(name: str):
-    """Get a specific strategy"""
+    """Get a specific strategy (DEPRECATED - may return any user's strategy with this name)"""
     strategy = strategy_repo.get_strategy(name)
     if not strategy:
         raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
@@ -418,7 +416,7 @@ async def update_strategy(
     short_symbol: Optional[str] = Form(None),
     cash_balance: Optional[float] = Form(None)
 ):
-    """Update a strategy"""
+    """Update a strategy (DEPRECATED - may update any user's strategy with this name)"""
     try:
         # Clean up symbol inputs
         if long_symbol is not None:
@@ -436,7 +434,7 @@ async def update_strategy(
 
 @app.delete("/api/strategies/{name}")
 async def delete_strategy(name: str):
-    """Delete a strategy"""
+    """Delete a strategy (DEPRECATED - may delete any user's strategy with this name)"""
     success = strategy_repo.delete_strategy(name)
     if not success:
         raise HTTPException(status_code=404, detail=f"Strategy '{name}' not found")
@@ -449,7 +447,7 @@ async def update_strategy_symbols(
     long_symbol: Optional[str] = Form(""),
     short_symbol: Optional[str] = Form("")
 ):
-    """Update symbols for a specific strategy"""
+    """Update symbols for a specific strategy (DEPRECATED - may update any user's strategy with this name)"""
     try:
         # Clean up inputs
         long_symbol = long_symbol.strip() if long_symbol.strip() else None
@@ -465,7 +463,7 @@ async def update_strategy_symbols(
 
 @app.post("/api/strategies/{name}/update-cash")
 async def update_strategy_cash(name: str, cash_amount: float = Form(...)):
-    """Update cash balance for a specific strategy"""
+    """Update cash balance for a specific strategy (DEPRECATED - may update any user's strategy with this name)"""
     try:
         strategy = strategy_repo.get_strategy(name)
         if not strategy:
@@ -484,7 +482,7 @@ async def update_strategy_cash(name: str, cash_amount: float = Form(...)):
 
 @app.post("/api/strategies/{name}/start-cooldown")
 async def start_strategy_cooldown(name: str):
-    """Start cooldown for a specific strategy"""
+    """Start cooldown for a specific strategy (DEPRECATED - may affect any user's strategy with this name)"""
     try:
         strategy = strategy_repo.get_strategy(name)
         if not strategy:
@@ -498,7 +496,7 @@ async def start_strategy_cooldown(name: str):
 
 @app.post("/api/strategies/{name}/stop-cooldown")
 async def stop_strategy_cooldown(name: str):
-    """Stop cooldown for a specific strategy"""
+    """Stop cooldown for a specific strategy (DEPRECATED - may affect any user's strategy with this name)"""
     try:
         strategy = strategy_repo.get_strategy(name)
         if not strategy:
@@ -512,7 +510,7 @@ async def stop_strategy_cooldown(name: str):
 
 @app.post("/api/strategies/{name}/force-long")
 async def force_strategy_long(name: str, background_tasks: BackgroundTasks):
-    """Force long position for a specific strategy"""
+    """Force long position for a specific strategy (DEPRECATED - may affect any user's strategy with this name)"""
     try:
         strategy = strategy_repo.get_strategy(name)
         if not strategy:
@@ -531,7 +529,7 @@ async def force_strategy_long(name: str, background_tasks: BackgroundTasks):
 
 @app.post("/api/strategies/{name}/force-short")
 async def force_strategy_short(name: str, background_tasks: BackgroundTasks):
-    """Force short position for a specific strategy"""
+    """Force short position for a specific strategy (DEPRECATED - may affect any user's strategy with this name)"""
     try:
         strategy = strategy_repo.get_strategy(name)
         if not strategy:
@@ -550,7 +548,7 @@ async def force_strategy_short(name: str, background_tasks: BackgroundTasks):
 
 @app.post("/api/strategies/{name}/force-close")
 async def force_strategy_close(name: str, background_tasks: BackgroundTasks):
-    """Force close all positions for a specific strategy"""
+    """Force close all positions for a specific strategy (DEPRECATED - may affect any user's strategy with this name)"""
     try:
         strategy = strategy_repo.get_strategy(name)
         if not strategy:
@@ -582,9 +580,10 @@ async def status():
             "user_specific": "/{username}/{strategy}/{signal}",
             "broadcast": "/cast/{strategy}/{signal}"
         },
+        "multi_user_support": "Multiple users can have strategies with identical names",
         "strategies": len(strategies),
         "users": len(available_users),
-        "strategy_names": [s.name for s in strategies],
+        "strategy_names": strategy_repo.get_strategy_names(),
         "user_names": available_users,
         "configured_users": {user: "configured" for user in users_data.keys()}
     }
