@@ -332,6 +332,54 @@ class StrategyRepository:
                 logger.debug(f"🔥 STRATEGY MIGRATION: added display_name to {strategy.name}")
             return strategy
     
+    def get_strategy_by_owner_and_name(self, owner: str, name: str) -> Optional[Strategy]:
+        """
+        Get a specific strategy by owner and name (for user-specific webhooks)
+        
+        Args:
+            owner: Username who owns the strategy
+            name: Strategy name (case insensitive)
+            
+        Returns:
+            Strategy instance or None if not found
+        """
+        normalized_owner = owner.lower()
+        normalized_name = name.lower()
+        
+        with self._storage_lock:
+            strategy = self.strategies.get(normalized_name)
+            if strategy and strategy.owner == normalized_owner:
+                if not hasattr(strategy, 'display_name'):
+                    strategy.display_name = strategy.name
+                    logger.debug(f"🔥 STRATEGY MIGRATION: added display_name to {strategy.name}")
+                return strategy
+            return None
+    
+    def get_strategies_by_name(self, name: str) -> List[Strategy]:
+        """
+        Get all strategies with the same name across all users (for broadcast webhooks)
+        
+        Args:
+            name: Strategy name to search for (case insensitive)
+            
+        Returns:
+            List of Strategy instances with that name
+        """
+        normalized_name = name.lower()
+        
+        with self._storage_lock:
+            matching_strategies = []
+            for strategy_key, strategy in self.strategies.items():
+                if strategy.name == normalized_name:
+                    if not hasattr(strategy, 'display_name'):
+                        strategy.display_name = strategy.name
+                        logger.debug(f"🔥 STRATEGY MIGRATION: added display_name to {strategy.name}")
+                    matching_strategies.append(strategy)
+            
+            # Sort by owner for consistent ordering
+            matching_strategies.sort(key=lambda s: s.owner)
+            return matching_strategies
+    
     def get_all_strategies(self) -> List[Strategy]:
         """
         Get all strategies ordered by creation date (from memory)
