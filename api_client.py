@@ -1,4 +1,4 @@
-# api_client.py - Signal Stack API client (strategy-aware)
+# api_client.py - Signal Stack API client with user-specific webhooks
 import httpx
 import asyncio
 import logging
@@ -6,23 +6,46 @@ import json
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 
-from config import SIGNAL_STACK_WEBHOOK_URL, API_TIMEOUT, MAX_RETRIES, RETRY_DELAY
+from config import get_webhook_url_for_user, API_TIMEOUT, MAX_RETRIES, RETRY_DELAY
 from strategy import Strategy
 
 logger = logging.getLogger(__name__)
 
 class SignalStackClient:
     def __init__(self):
-        self.webhook_url = SIGNAL_STACK_WEBHOOK_URL
         self.timeout = API_TIMEOUT
         self.max_retries = MAX_RETRIES
         self.retry_delay = RETRY_DELAY
+
+    def _get_webhook_url_for_strategy(self, strategy: Strategy) -> str:
+        """
+        Get the appropriate webhook URL for a strategy based on its owner
+        
+        Args:
+            strategy: Strategy instance
+            
+        Returns:
+            Webhook URL for the strategy's owner
+        """
+        webhook_url = get_webhook_url_for_user(strategy.owner)
+        if not webhook_url:
+            logger.error(f"🔥 ERROR: No webhook URL found for user {strategy.owner}. Check SIGNAL_STACK_WEBHOOK_URL_{strategy.owner.upper()} environment variable.")
+        return webhook_url
 
     async def _make_request(self, payload: Dict[str, Any], strategy: Strategy) -> Tuple[bool, Dict[str, Any]]:
         """
         Make a request to the Signal Stack API with retry logic
         Returns a tuple of (success, response)
         """
+        webhook_url = self._get_webhook_url_for_strategy(strategy)
+        if not webhook_url:
+            error_response = {
+                "status": "error", 
+                "message": f"No webhook URL configured for user {strategy.owner}"
+            }
+            strategy.add_api_call(payload, error_response)
+            return False, error_response
+        
         logger.info(f"🔥 API REQUEST: strategy={strategy.name} owner={strategy.owner} payload={payload}")
         
         retry_count = 0
@@ -30,7 +53,7 @@ class SignalStackClient:
             try:
                 async with httpx.AsyncClient() as client:
                     response = await client.post(
-                        self.webhook_url,
+                        webhook_url,
                         json=payload,
                         timeout=self.timeout
                     )
