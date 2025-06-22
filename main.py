@@ -1,6 +1,7 @@
-# main.py - Entry point, FastAPI setup (environment-based multi-user)
+# main.py - Entry point, FastAPI setup (environment-based multi-user with new webhook structure)
 import logging
 import os
+import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form, BackgroundTasks, HTTPException
@@ -40,6 +41,7 @@ async def lifespan(app):
     available_users = get_available_users()
     logger.info(f"🔥 SYSTEM STARTUP: Environment-Based Multi-User Trading Webhook Service")
     logger.info(f"🔥 AVAILABLE USERS: {', '.join(available_users) if available_users else 'None configured'}")
+    logger.info(f"🔥 WEBHOOK STRUCTURE: User-specific: /{{username}}/{{strategy}}/{{signal}} | Broadcast: /cast/{{strategy}}/{{signal}}")
     yield
     # Shutdown event
     logger.info("🔥 SYSTEM SHUTDOWN: Environment-Based Multi-User Trading Webhook Service")
@@ -51,51 +53,80 @@ app = FastAPI(title="Environment-Based Multi-User Trading Webhook Service", life
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Strategy-specific webhook endpoints
-@app.post("/{strategy_name}/long")
-async def webhook_long(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
-    """Webhook endpoint for long signals"""
-    return await _process_webhook(strategy_name, "long", request, background_tasks)
+# User-specific webhook endpoints
+@app.post("/{username}/{strategy_name}/long")
+async def webhook_user_long(username: str, strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """User-specific webhook endpoint for long signals"""
+    return await _process_user_webhook(username, strategy_name, "long", request, background_tasks)
 
-@app.post("/{strategy_name}/short")
-async def webhook_short(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
-    """Webhook endpoint for short signals"""
-    return await _process_webhook(strategy_name, "short", request, background_tasks)
+@app.post("/{username}/{strategy_name}/short")
+async def webhook_user_short(username: str, strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """User-specific webhook endpoint for short signals"""
+    return await _process_user_webhook(username, strategy_name, "short", request, background_tasks)
 
-@app.post("/{strategy_name}/close")
-async def webhook_close(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
-    """Webhook endpoint for close signals"""
-    return await _process_webhook(strategy_name, "close", request, background_tasks)
+@app.post("/{username}/{strategy_name}/close")
+async def webhook_user_close(username: str, strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """User-specific webhook endpoint for close signals"""
+    return await _process_user_webhook(username, strategy_name, "close", request, background_tasks)
 
-async def _process_webhook(strategy_name: str, signal: str, request: Request, background_tasks: BackgroundTasks):
-    """Process webhook signal for a specific strategy"""
+# Broadcast webhook endpoints
+@app.post("/cast/{strategy_name}/long")
+async def webhook_broadcast_long(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """Broadcast webhook endpoint for long signals (all users with this strategy)"""
+    return await _process_broadcast_webhook(strategy_name, "long", request, background_tasks)
+
+@app.post("/cast/{strategy_name}/short")
+async def webhook_broadcast_short(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """Broadcast webhook endpoint for short signals (all users with this strategy)"""
+    return await _process_broadcast_webhook(strategy_name, "short", request, background_tasks)
+
+@app.post("/cast/{strategy_name}/close")
+async def webhook_broadcast_close(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """Broadcast webhook endpoint for close signals (all users with this strategy)"""
+    return await _process_broadcast_webhook(strategy_name, "close", request, background_tasks)
+
+async def _process_user_webhook(username: str, strategy_name: str, signal: str, request: Request, background_tasks: BackgroundTasks):
+    """Process webhook signal for a specific user's strategy"""
     try:
         client_ip = request.client.host if request.client else "unknown"
-        logger.info(f"🔥 WEBHOOK RECEIVED: strategy={strategy_name} signal={signal} from_ip={client_ip}")
+        logger.info(f"🔥 USER WEBHOOK RECEIVED: user={username} strategy={strategy_name} signal={signal} from_ip={client_ip}")
         
-        # Get strategy
-        strategy = strategy_repo.get_strategy(strategy_name)
+        # Check if user exists
+        if not user_exists(username):
+            available_users = get_available_users()
+            error_response = {
+                "status": "error",
+                "error_type": "user_not_found", 
+                "message": f"User '{username}' not found",
+                "available_users": available_users,
+                "help": "Check the username in your webhook URL or configure this user's environment variable"
+            }
+            logger.error(f"🔥 ERROR: user={username} not_found webhook_ignored")
+            return JSONResponse(status_code=404, content=error_response)
+        
+        # Get user's specific strategy
+        strategy = strategy_repo.get_strategy_by_owner_and_name(username, strategy_name)
         if not strategy:
-            available_strategies = strategy_repo.get_strategy_names()
+            user_strategies = strategy_repo.get_strategies_by_owner(username)
             error_response = {
                 "status": "error",
                 "error_type": "strategy_not_found", 
-                "message": f"Strategy '{strategy_name}' not found",
-                "available_strategies": available_strategies,
+                "message": f"Strategy '{strategy_name}' not found for user '{username}'",
+                "user_strategies": [s.name for s in user_strategies],
                 "help": "Create this strategy first or check the strategy name in your webhook URL"
             }
-            logger.error(f"🔥 ERROR: strategy={strategy_name} not_found webhook_ignored")
+            logger.error(f"🔥 ERROR: user={username} strategy={strategy_name} not_found webhook_ignored")
             return JSONResponse(status_code=404, content=error_response)
         
-        logger.info(f"🔥 STRATEGY LOOKUP: found strategy={strategy.name} owner={strategy.owner} symbols={strategy.long_symbol}/{strategy.short_symbol} cash={strategy.cash_balance}")
+        logger.info(f"🔥 USER STRATEGY LOOKUP: found strategy={strategy.name} owner={strategy.owner} symbols={strategy.long_symbol}/{strategy.short_symbol} cash={strategy.cash_balance}")
         
         # Process signal in background to avoid webhook timeout
         background_tasks.add_task(signal_processor.process_signal, signal, strategy)
         
-        return {"status": "processing", "strategy": strategy_name, "signal": signal}
+        return {"status": "processing", "user": username, "strategy": strategy_name, "signal": signal}
         
     except Exception as e:
-        logger.exception(f"🔥 ERROR: strategy={strategy_name} webhook_processing_error={str(e)}")
+        logger.exception(f"🔥 ERROR: user={username} strategy={strategy_name} webhook_processing_error={str(e)}")
         return JSONResponse(
             status_code=500, 
             content={
@@ -105,6 +136,91 @@ async def _process_webhook(strategy_name: str, signal: str, request: Request, ba
                 "help": "Check server logs for details"
             }
         )
+
+async def _process_broadcast_webhook(strategy_name: str, signal: str, request: Request, background_tasks: BackgroundTasks):
+    """Process webhook signal for all users with the same strategy name"""
+    try:
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info(f"🔥 BROADCAST WEBHOOK RECEIVED: strategy={strategy_name} signal={signal} from_ip={client_ip}")
+        
+        # Get all strategies with this name across all users
+        strategies = strategy_repo.get_strategies_by_name(strategy_name)
+        if not strategies:
+            all_strategy_names = set()
+            all_strategies = strategy_repo.get_all_strategies()
+            for s in all_strategies:
+                all_strategy_names.add(s.name)
+            
+            error_response = {
+                "status": "error",
+                "error_type": "strategy_not_found", 
+                "message": f"No strategies named '{strategy_name}' found across any users",
+                "available_strategies": sorted(list(all_strategy_names)),
+                "help": "Create strategies with this name first or check the strategy name in your webhook URL"
+            }
+            logger.error(f"🔥 ERROR: broadcast strategy={strategy_name} not_found webhook_ignored")
+            return JSONResponse(status_code=404, content=error_response)
+        
+        logger.info(f"🔥 BROADCAST STRATEGY LOOKUP: found {len(strategies)} strategies named '{strategy_name}' across users: {[s.owner for s in strategies]}")
+        
+        # Log each strategy being processed
+        for strategy in strategies:
+            logger.info(f"🔥 BROADCAST PROCESSING: strategy={strategy.name} owner={strategy.owner} symbols={strategy.long_symbol}/{strategy.short_symbol} cash={strategy.cash_balance}")
+        
+        # Process signals in parallel for all matching strategies
+        background_tasks.add_task(_process_broadcast_signals_parallel, signal, strategies)
+        
+        return {
+            "status": "processing", 
+            "strategy": strategy_name, 
+            "signal": signal,
+            "target_count": len(strategies),
+            "target_users": [s.owner for s in strategies]
+        }
+        
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: broadcast strategy={strategy_name} webhook_processing_error={str(e)}")
+        return JSONResponse(
+            status_code=500, 
+            content={
+                "status": "error",
+                "error_type": "internal_error",
+                "message": str(e),
+                "help": "Check server logs for details"
+            }
+        )
+
+async def _process_broadcast_signals_parallel(signal: str, strategies):
+    """Process signal for multiple strategies in parallel"""
+    logger.info(f"🔥 BROADCAST PARALLEL: starting signal={signal} for {len(strategies)} strategies")
+    
+    # Create tasks for each strategy
+    tasks = []
+    for strategy in strategies:
+        logger.info(f"🔥 BROADCAST PARALLEL: queuing strategy={strategy.name} owner={strategy.owner}")
+        task = asyncio.create_task(signal_processor.process_signal(signal, strategy))
+        tasks.append(task)
+    
+    # Wait for all signals to complete in parallel
+    try:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Log results
+        success_count = 0
+        error_count = 0
+        for i, result in enumerate(results):
+            strategy = strategies[i]
+            if isinstance(result, Exception):
+                logger.error(f"🔥 BROADCAST PARALLEL ERROR: strategy={strategy.name} owner={strategy.owner} error={str(result)}")
+                error_count += 1
+            else:
+                logger.info(f"🔥 BROADCAST PARALLEL SUCCESS: strategy={strategy.name} owner={strategy.owner} result={result}")
+                success_count += 1
+        
+        logger.info(f"🔥 BROADCAST PARALLEL COMPLETE: signal={signal} success={success_count} errors={error_count} total={len(strategies)}")
+        
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: broadcast parallel processing failed: {str(e)}")
 
 # Root route - show available users
 @app.get("/", response_class=HTMLResponse)
@@ -462,6 +578,10 @@ async def status():
     return {
         "status": "ok",
         "system": "environment-based-multi-user",
+        "webhook_structure": {
+            "user_specific": "/{username}/{strategy}/{signal}",
+            "broadcast": "/cast/{strategy}/{signal}"
+        },
         "strategies": len(strategies),
         "users": len(available_users),
         "strategy_names": [s.name for s in strategies],
