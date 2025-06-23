@@ -2,6 +2,7 @@
 
 var currentStrategy = null;
 var cooldownTimers = {}; // Store timers for each strategy
+var apiTimers = []; // Store API log timers
 var currentUsername = null; // Will be set from HTML template
 
 // Loading state management with avatar
@@ -100,6 +101,9 @@ function switchToStrategy(strategyName) {
     }
     
     currentStrategy = strategyName;
+    
+    // Initialize API timers for the selected strategy
+    initializeApiTimers();
 }
 
 // Strategy Creation
@@ -745,6 +749,85 @@ function setCurrentUsername(username) {
     console.log('🔥 DASHBOARD: Current user set to', currentUsername);
 }
 
+// API Logs timestamp formatting and timers
+function formatTimestamp(isoString) {
+    try {
+        var date = new Date(isoString);
+        return date.toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+    } catch (e) {
+        return isoString;
+    }
+}
+
+function formatElapsedTime(startTime) {
+    var now = new Date();
+    var start = new Date(startTime);
+    var elapsed = now - start;
+    
+    if (elapsed < 0) return '0s ago';
+    
+    var seconds = Math.floor(elapsed / 1000);
+    var minutes = Math.floor(seconds / 60);
+    var hours = Math.floor(minutes / 60);
+    var days = Math.floor(hours / 24);
+    
+    seconds = seconds % 60;
+    minutes = minutes % 60;
+    hours = hours % 24;
+    
+    var parts = [];
+    if (days > 0) parts.push(days + 'd');
+    if (hours > 0) parts.push(hours + 'h');
+    if (minutes > 0) parts.push(minutes + 'm');
+    if (seconds > 0 || parts.length === 0) parts.push(seconds + 's');
+    
+    return parts.join(' ') + ' ago';
+}
+
+function initializeApiTimers() {
+    // Clear existing timers
+    apiTimers.forEach(function(timer) {
+        clearInterval(timer);
+    });
+    apiTimers = [];
+    
+    // Find all timestamp elements and set up timers
+    var timestampElements = document.querySelectorAll('.timestamp[data-timestamp]');
+    var timerElements = document.querySelectorAll('.timer[data-start]');
+    
+    // Format timestamps to human readable
+    timestampElements.forEach(function(element) {
+        var isoTimestamp = element.getAttribute('data-timestamp');
+        if (isoTimestamp) {
+            element.textContent = formatTimestamp(isoTimestamp);
+        }
+    });
+    
+    // Set up countup timers
+    timerElements.forEach(function(element) {
+        var startTime = element.getAttribute('data-start');
+        if (startTime) {
+            // Update immediately
+            element.textContent = formatElapsedTime(startTime);
+            
+            // Update every second
+            var timer = setInterval(function() {
+                element.textContent = formatElapsedTime(startTime);
+            }, 1000);
+            
+            apiTimers.push(timer);
+        }
+    });
+}
+
 // Handle Enter key in form inputs
 document.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
@@ -797,4 +880,18 @@ document.addEventListener('keydown', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     setupCreateStrategyForm();
     initializeCooldownTimers();
+    initializeApiTimers();
+});
+
+// Cleanup timers when page unloads
+window.addEventListener('beforeunload', function() {
+    // Clear cooldown timers
+    Object.values(cooldownTimers).forEach(function(timer) {
+        clearInterval(timer);
+    });
+    
+    // Clear API timers
+    apiTimers.forEach(function(timer) {
+        clearInterval(timer);
+    });
 });
