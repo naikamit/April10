@@ -752,7 +752,26 @@ function setCurrentUsername(username) {
 // API Logs timestamp formatting and timers
 function formatTimestamp(isoString) {
     try {
-        var date = new Date(isoString);
+        // Parse the server timestamp and force it to be treated as UTC (same logic as countup timer)
+        var cleanTime = isoString.replace(/Z.*$/, '').replace(/[+-]\d{2}:?\d{2}$/, '');
+        
+        var date;
+        var parts = cleanTime.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.?(\d*)/);
+        if (parts) {
+            var year = parseInt(parts[1]);
+            var month = parseInt(parts[2]) - 1; // Month is 0-indexed
+            var day = parseInt(parts[3]);
+            var hour = parseInt(parts[4]);
+            var minute = parseInt(parts[5]);
+            var second = parseInt(parts[6]);
+            var ms = parts[7] ? parseInt(parts[7].substring(0, 3).padEnd(3, '0')) : 0;
+            
+            date = new Date(Date.UTC(year, month, day, hour, minute, second, ms));
+        } else {
+            // Fallback to original parsing
+            date = new Date(isoString);
+        }
+        
         // Ensure we're using the browser's local timezone
         return date.toLocaleString(undefined, {
             year: 'numeric',
