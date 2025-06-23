@@ -54,23 +54,7 @@ app = FastAPI(title="Environment-Based Multi-User Trading Webhook Service", life
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# User-specific webhook endpoints
-@app.post("/{username}/{strategy_name}/long")
-async def webhook_user_long(username: str, strategy_name: str, request: Request, background_tasks: BackgroundTasks):
-    """User-specific webhook endpoint for long signals"""
-    return await _process_user_webhook(username, strategy_name, "long", request, background_tasks)
-
-@app.post("/{username}/{strategy_name}/short")
-async def webhook_user_short(username: str, strategy_name: str, request: Request, background_tasks: BackgroundTasks):
-    """User-specific webhook endpoint for short signals"""
-    return await _process_user_webhook(username, strategy_name, "short", request, background_tasks)
-
-@app.post("/{username}/{strategy_name}/close")
-async def webhook_user_close(username: str, strategy_name: str, request: Request, background_tasks: BackgroundTasks):
-    """User-specific webhook endpoint for close signals"""
-    return await _process_user_webhook(username, strategy_name, "close", request, background_tasks)
-
-# Broadcast webhook endpoints
+# Broadcast webhook endpoints (MUST come BEFORE user-specific routes)
 @app.post("/cast/{strategy_name}/long")
 async def webhook_broadcast_long(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
     """Broadcast webhook endpoint for long signals (all users with this strategy)"""
@@ -85,6 +69,22 @@ async def webhook_broadcast_short(strategy_name: str, request: Request, backgrou
 async def webhook_broadcast_close(strategy_name: str, request: Request, background_tasks: BackgroundTasks):
     """Broadcast webhook endpoint for close signals (all users with this strategy)"""
     return await _process_broadcast_webhook(strategy_name, "close", request, background_tasks)
+
+# User-specific webhook endpoints (MUST come AFTER broadcast routes)
+@app.post("/{username}/{strategy_name}/long")
+async def webhook_user_long(username: str, strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """User-specific webhook endpoint for long signals"""
+    return await _process_user_webhook(username, strategy_name, "long", request, background_tasks)
+
+@app.post("/{username}/{strategy_name}/short")
+async def webhook_user_short(username: str, strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """User-specific webhook endpoint for short signals"""
+    return await _process_user_webhook(username, strategy_name, "short", request, background_tasks)
+
+@app.post("/{username}/{strategy_name}/close")
+async def webhook_user_close(username: str, strategy_name: str, request: Request, background_tasks: BackgroundTasks):
+    """User-specific webhook endpoint for close signals"""
+    return await _process_user_webhook(username, strategy_name, "close", request, background_tasks)
 
 async def _process_user_webhook(username: str, strategy_name: str, signal: str, request: Request, background_tasks: BackgroundTasks):
     """Process webhook signal for a specific user's strategy"""
