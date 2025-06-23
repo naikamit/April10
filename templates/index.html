@@ -44,6 +44,26 @@
         .webhook-category .webhook-url-group:last-child {
             margin-bottom: 0;
         }
+
+        /* API Logs timestamp styling */
+        .timestamp-container {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .timestamp {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .timer {
+            color: #60a5fa;
+            font-size: 0.8rem;
+            font-family: monospace;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -176,32 +196,6 @@
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- Broadcast Webhooks -->
-                    <div class="webhook-category">
-                        <h3>Broadcast (all users with "{{ strategy.get('name', 'unknown') }}" strategy)</h3>
-                        <div class="webhook-url-group">
-                            <label>Long:</label>
-                            <div class="url-input-group">
-                                <input type="text" readonly value="{{ request.base_url }}cast/{{ strategy.get('name', 'unknown') }}/long" id="cast-long-url-{{ strategy.get('name', 'unknown') }}">
-                                <button onclick="copyToClipboard('cast-long-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
-                            </div>
-                        </div>
-                        <div class="webhook-url-group">
-                            <label>Short:</label>
-                            <div class="url-input-group">
-                                <input type="text" readonly value="{{ request.base_url }}cast/{{ strategy.get('name', 'unknown') }}/short" id="cast-short-url-{{ strategy.get('name', 'unknown') }}">
-                                <button onclick="copyToClipboard('cast-short-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
-                            </div>
-                        </div>
-                        <div class="webhook-url-group">
-                            <label>Close:</label>
-                            <div class="url-input-group">
-                                <input type="text" readonly value="{{ request.base_url }}cast/{{ strategy.get('name', 'unknown') }}/close" id="cast-close-url-{{ strategy.get('name', 'unknown') }}">
-                                <button onclick="copyToClipboard('cast-close-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -290,7 +284,14 @@
                         {% for call in strategy.api_calls|reverse %}
                             <div class="api-call">
                                 <div class="api-call-header">
-                                    <div class="timestamp">{{ call.get('timestamp', 'Unknown') }}</div>
+                                    <div class="timestamp-container">
+                                        <div class="timestamp" data-timestamp="{{ call.get('timestamp', '') }}">
+                                            {{ call.get('timestamp', 'Unknown') }}
+                                        </div>
+                                        <div class="timer" data-start="{{ call.get('timestamp', '') }}">
+                                            Calculating...
+                                        </div>
+                                    </div>
                                     <div class="status {{ call.get('response', {}).get('status', 'unknown') }}">
                                         {{ call.get('response', {}).get('status', 'Unknown') }}
                                     </div>
