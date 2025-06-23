@@ -753,14 +753,16 @@ function setCurrentUsername(username) {
 function formatTimestamp(isoString) {
     try {
         var date = new Date(isoString);
-        return date.toLocaleString('en-US', {
+        // Ensure we're using the browser's local timezone
+        return date.toLocaleString(undefined, {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
-            hour12: true
+            hour12: true,
+            timeZoneName: 'short'
         });
     } catch (e) {
         return isoString;
