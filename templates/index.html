@@ -50,8 +50,6 @@
     <div id="toast-container"></div>
 
     <div class="container">
-        <h1>{{ username }}</h1>
-
         <!-- Strategy Tabs -->
         <div class="tabs-container">
             <div class="tabs-header">
@@ -70,7 +68,7 @@
         {% if not strategies %}
         <div class="empty-state">
             <h2>No Strategies Found</h2>
-            <p>Create your first strategy to get started with {{ username }}</p>
+            <p>Create your first strategy to get started</p>
             <button class="create-strategy-btn" onclick="showCreateStrategy()">Create Your First Strategy</button>
         </div>
         {% endif %}
@@ -79,7 +77,7 @@
         <div id="create-strategy-modal" class="modal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>Create New Strategy for {{ username }}</h3>
+                    <h3>Create New Strategy</h3>
                     <span class="modal-close" onclick="hideCreateStrategy()">&times;</span>
                 </div>
                 <form id="create-strategy-form">
@@ -115,6 +113,39 @@
         {% for strategy in strategies %}
         <div class="strategy-content" id="strategy-{{ strategy.get('name', 'unknown') }}" style="display: none;">
             
+            <!-- Cash Balance Section (Options BP) - Moved to top -->
+            <div class="cash-section">
+                <div class="cash-card">
+                    <h2>Options BP</h2>
+                    <div class="cash-amount">${{ "%.2f"|format(strategy.get('cash_balance', 0) or 0) }}</div>
+                    <div class="cash-details">
+                        <div>Strategy: {{ strategy.get('display_name', strategy.get('name', 'Unknown')) }}</div>
+                        <div>Last updated: 
+                            {% if strategy.get('cash_info') and strategy.cash_info.get('staleness') %}
+                                {% set staleness = strategy.cash_info.staleness %}
+                                {% if staleness.get('days', 0) > 0 %}
+                                    {{ staleness.days }} days
+                                {% endif %}
+                                {% if staleness.get('hours', 0) > 0 %}
+                                    {{ staleness.hours }} hours
+                                {% endif %}
+                                {{ staleness.get('minutes', 0) }} minutes ago
+                            {% else %}
+                                Just now
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <form class="update-form">
+                        <div class="form-group">
+                            <input type="number" class="cash-amount-input" step="0.01" required 
+                                   placeholder="Enter new balance">
+                            <button type="button" onclick="updateStrategyCash('{{ strategy.get('name', 'unknown') }}')">Update</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <!-- Webhook URLs Section -->
             <div class="webhook-section">
                 <div class="webhook-card">
@@ -219,39 +250,6 @@
                         <button type="button" class="manual-btn force-short" onclick="forceStrategyShort('{{ strategy.get('name', 'unknown') }}')">Force Short</button>
                         <button type="button" class="manual-btn force-close" onclick="forceStrategyClose('{{ strategy.get('name', 'unknown') }}')">Force Close</button>
                     </div>
-                </div>
-            </div>
-            
-            <!-- Cash Balance Section -->
-            <div class="cash-section">
-                <div class="cash-card">
-                    <h2>Options BP</h2>
-                    <div class="cash-amount">${{ "%.2f"|format(strategy.get('cash_balance', 0) or 0) }}</div>
-                    <div class="cash-details">
-                        <div>Strategy: {{ strategy.get('display_name', strategy.get('name', 'Unknown')) }}</div>
-                        <div>Last updated: 
-                            {% if strategy.get('cash_info') and strategy.cash_info.get('staleness') %}
-                                {% set staleness = strategy.cash_info.staleness %}
-                                {% if staleness.get('days', 0) > 0 %}
-                                    {{ staleness.days }} days
-                                {% endif %}
-                                {% if staleness.get('hours', 0) > 0 %}
-                                    {{ staleness.hours }} hours
-                                {% endif %}
-                                {{ staleness.get('minutes', 0) }} minutes ago
-                            {% else %}
-                                Just now
-                            {% endif %}
-                        </div>
-                    </div>
-                    
-                    <form class="update-form">
-                        <div class="form-group">
-                            <input type="number" class="cash-amount-input" step="0.01" required 
-                                   placeholder="Enter new balance">
-                            <button type="button" onclick="updateStrategyCash('{{ strategy.get('name', 'unknown') }}')">Update</button>
-                        </div>
-                    </form>
                 </div>
             </div>
             
