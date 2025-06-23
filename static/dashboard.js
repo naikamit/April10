@@ -772,14 +772,30 @@ function formatTimestamp(isoString) {
 function formatElapsedTime(startTime) {
     var now = new Date();
     
-    // Ensure the startTime is treated as UTC if it doesn't have timezone info
+    // Parse the server timestamp and force it to be treated as UTC
     var start;
-    if (startTime.endsWith('Z') || startTime.includes('+') || startTime.includes('-')) {
-        // Already has timezone info
+    try {
+        // Remove any existing timezone info and treat as UTC
+        var cleanTime = startTime.replace(/Z.*$/, '').replace(/[+-]\d{2}:?\d{2}$/, '');
+        
+        // Parse as UTC by using Date.UTC
+        var parts = cleanTime.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.?(\d*)/);
+        if (parts) {
+            var year = parseInt(parts[1]);
+            var month = parseInt(parts[2]) - 1; // Month is 0-indexed
+            var day = parseInt(parts[3]);
+            var hour = parseInt(parts[4]);
+            var minute = parseInt(parts[5]);
+            var second = parseInt(parts[6]);
+            var ms = parts[7] ? parseInt(parts[7].substring(0, 3).padEnd(3, '0')) : 0;
+            
+            start = new Date(Date.UTC(year, month, day, hour, minute, second, ms));
+        } else {
+            // Fallback to original parsing
+            start = new Date(startTime);
+        }
+    } catch (e) {
         start = new Date(startTime);
-    } else {
-        // No timezone info, treat as UTC by adding 'Z'
-        start = new Date(startTime + 'Z');
     }
     
     var elapsed = now - start;
