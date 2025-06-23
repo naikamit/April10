@@ -771,7 +771,17 @@ function formatTimestamp(isoString) {
 
 function formatElapsedTime(startTime) {
     var now = new Date();
-    var start = new Date(startTime);
+    
+    // Ensure the startTime is treated as UTC if it doesn't have timezone info
+    var start;
+    if (startTime.endsWith('Z') || startTime.includes('+') || startTime.includes('-')) {
+        // Already has timezone info
+        start = new Date(startTime);
+    } else {
+        // No timezone info, treat as UTC by adding 'Z'
+        start = new Date(startTime + 'Z');
+    }
+    
     var elapsed = now - start;
     
     if (elapsed < 0) return '0s ago';
