@@ -220,22 +220,37 @@ async def _process_broadcast_signals_parallel(signal: str, strategies):
     except Exception as e:
         logger.exception(f"🔥 ERROR: broadcast parallel processing failed: {str(e)}")
 
-# Root route - show available users
+# Root route - blank page
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    """Show available users or redirect if only one user"""
+    """Blank root page"""
+    return HTMLResponse("""
+    <html>
+        <head>
+            <title>RetardTrader</title>
+            <link rel="stylesheet" href="/static/style.css">
+        </head>
+        <body style="font-family: Arial; margin: 0; padding: 0; background: #0f172a; color: #e4e4e7;">
+        </body>
+    </html>
+    """)
+
+# Master dashboard route - show available users with strategy management
+@app.get("/cast", response_class=HTMLResponse)
+async def master_dashboard():
+    """Master dashboard with strategy management across all users"""
     available_users = get_available_users()
     users_data = get_users_from_environment()
     
-    if len(available_users) == 1:
-        # If only one user, redirect to their dashboard
-        return RedirectResponse(url=f"/{available_users[0]}", status_code=302)
-    elif len(available_users) == 0:
+    # Get all unique strategy names for the dropdown
+    all_strategy_names = strategy_repo.get_strategy_names()
+    
+    if len(available_users) == 0:
         # No users configured
         return HTMLResponse(f"""
         <html>
             <head>
-                <title>RetardTrader</title>
+                <title>RetardTrader - Master Dashboard</title>
                 <link rel="stylesheet" href="/static/style.css">
             </head>
             <body style="font-family: Arial; margin: 40px; background: #0f172a; color: #e4e4e7;">
@@ -252,60 +267,535 @@ async def root():
         </html>
         """)
     else:
-        # Multiple users - show selection
+        # Show master dashboard with strategy management
+        strategy_options = ''.join(
+            f'<option value="{name}">{name}</option>' 
+            for name in sorted(all_strategy_names)
+        )
+        
         user_links = ''.join(
             f'<div class="user-card"><a href="/{user}" class="user-link">{user}</a></div>' 
             for user in sorted(available_users)
         )
+        
         return HTMLResponse(f"""
         <html>
             <head>
-                <title>RetardTrader</title>
+                <title>RetardTrader - Master Dashboard</title>
                 <link rel="stylesheet" href="/static/style.css">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
             </head>
             <body>
+                <div id="toast-container"></div>
                 <div class="container">
-                    <h1>Select User</h1>
-                    <div class="users-grid">
-                        {user_links}
+                    <h1>Master Dashboard</h1>
+                    
+                    <!-- Strategy Management Section -->
+                    {f'''
+                    <div class="master-strategy-section">
+                        <h2>Strategy Management</h2>
+                        <div class="strategy-controls">
+                            <div class="form-group">
+                                <label for="strategy-select">Select Strategy:</label>
+                                <select id="strategy-select" onchange="onStrategySelect()">
+                                    <option value="">-- Select a Strategy --</option>
+                                    {strategy_options}
+                                </select>
+                            </div>
+                            
+                            <div id="strategy-details" style="display: none;">
+                                <div class="strategy-info">
+                                    <h3 id="selected-strategy-name"></h3>
+                                    <div id="strategy-users"></div>
+                                </div>
+                                
+                                <!-- Symbol Update Section -->
+                                <div class="symbols-update-section">
+                                    <h4>Update Symbols (All Users)</h4>
+                                    <div class="symbols-form">
+                                        <div class="form-group">
+                                            <label for="long-symbol">Long Symbol:</label>
+                                            <input type="text" id="long-symbol" placeholder="e.g., MSTU">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="short-symbol">Short Symbol:</label>
+                                            <input type="text" id="short-symbol" placeholder="e.g., MSTZ">
+                                        </div>
+                                        <button type="button" onclick="updateSymbolsForAll()" class="update-btn">
+                                            Update Symbols for All Users
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Force Actions Section -->
+                                <div class="force-actions-section">
+                                    <h4>Force Actions (All Users)</h4>
+                                    <div class="force-actions">
+                                        <button type="button" onclick="forceActionForAll('long')" class="force-btn force-long">
+                                            Force Long (All Users)
+                                        </button>
+                                        <button type="button" onclick="forceActionForAll('short')" class="force-btn force-short">
+                                            Force Short (All Users)
+                                        </button>
+                                        <button type="button" onclick="forceActionForAll('close')" class="force-btn force-close">
+                                            Force Close (All Users)
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div style="margin-top: 30px; text-align: center; color: #94a3b8;">
-                        <p>{len(available_users)} users available</p>
+                    ''' if all_strategy_names else '<div class="empty-state"><h2>No Strategies Found</h2><p>Create strategies first to manage them here.</p></div>'}
+                    
+                    <!-- User Selection Section -->
+                    <div class="users-section">
+                        <h2>User Dashboards</h2>
+                        <div class="users-grid">
+                            {user_links}
+                        </div>
+                        <div style="margin-top: 20px; text-align: center; color: #94a3b8;">
+                            <p>{len(available_users)} users available</p>
+                        </div>
                     </div>
                 </div>
+                
                 <style>
+                .master-strategy-section {{
+                    background: #1e293b;
+                    border-radius: 8px;
+                    padding: 30px;
+                    margin-bottom: 30px;
+                    border: 1px solid #374151;
+                }}
+                
+                .strategy-controls {{
+                    max-width: 600px;
+                }}
+                
+                .form-group {{
+                    margin-bottom: 20px;
+                }}
+                
+                .form-group label {{
+                    display: block;
+                    color: #cbd5e1;
+                    font-weight: 500;
+                    margin-bottom: 8px;
+                    font-size: 0.95rem;
+                }}
+                
+                .form-group select,
+                .form-group input {{
+                    width: 100%;
+                    padding: 12px;
+                    background-color: #475569;
+                    border: 1px solid #64748b;
+                    border-radius: 6px;
+                    color: #e4e4e7;
+                    font-size: 0.95rem;
+                    transition: border-color 0.3s, box-shadow 0.3s;
+                }}
+                
+                .form-group select:focus,
+                .form-group input:focus {{
+                    outline: none;
+                    border-color: #60a5fa;
+                    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2);
+                }}
+                
+                #strategy-details {{
+                    margin-top: 30px;
+                    padding-top: 20px;
+                    border-top: 1px solid #475569;
+                }}
+                
+                .strategy-info {{
+                    margin-bottom: 30px;
+                }}
+                
+                .strategy-info h3 {{
+                    color: #60a5fa;
+                    margin-bottom: 10px;
+                }}
+                
+                .strategy-users {{
+                    color: #94a3b8;
+                    font-size: 0.9rem;
+                }}
+                
+                .symbols-update-section,
+                .force-actions-section {{
+                    background: #334155;
+                    border-radius: 8px;
+                    padding: 20px;
+                    margin-bottom: 20px;
+                }}
+                
+                .symbols-update-section h4,
+                .force-actions-section h4 {{
+                    color: #f1f5f9;
+                    margin-bottom: 15px;
+                    margin-top: 0;
+                }}
+                
+                .symbols-form {{
+                    display: grid;
+                    grid-template-columns: 1fr 1fr auto;
+                    gap: 15px;
+                    align-items: end;
+                }}
+                
+                .update-btn {{
+                    background-color: #3b82f6;
+                    color: white;
+                    border: none;
+                    padding: 12px 20px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 500;
+                    font-size: 0.95rem;
+                    transition: background-color 0.3s, transform 0.1s;
+                    white-space: nowrap;
+                }}
+                
+                .update-btn:hover {{
+                    background-color: #2563eb;
+                    transform: translateY(-1px);
+                }}
+                
+                .force-actions {{
+                    display: flex;
+                    gap: 15px;
+                    flex-wrap: wrap;
+                }}
+                
+                .force-btn {{
+                    padding: 12px 20px;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 500;
+                    font-size: 0.95rem;
+                    transition: all 0.3s;
+                    min-width: 140px;
+                }}
+                
+                .force-btn:hover {{
+                    transform: translateY(-1px);
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+                }}
+                
+                .force-long {{
+                    background-color: #059669;
+                    color: white;
+                }}
+                
+                .force-long:hover {{
+                    background-color: #047857;
+                }}
+                
+                .force-short {{
+                    background-color: #dc2626;
+                    color: white;
+                }}
+                
+                .force-short:hover {{
+                    background-color: #b91c1c;
+                }}
+                
+                .force-close {{
+                    background-color: #f59e0b;
+                    color: #000;
+                }}
+                
+                .force-close:hover {{
+                    background-color: #d97706;
+                }}
+                
+                .users-section {{
+                    background: #1e293b;
+                    border-radius: 8px;
+                    padding: 30px;
+                    border: 1px solid #374151;
+                }}
+                
                 .users-grid {{
                     display: grid;
                     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
                     gap: 20px;
-                    margin: 30px 0;
+                    margin: 20px 0;
                 }}
+                
                 .user-card {{
-                    background: #1e293b;
+                    background: #334155;
                     border-radius: 8px;
                     padding: 0;
-                    border: 1px solid #374151;
+                    border: 1px solid #475569;
                     transition: all 0.3s;
                 }}
+                
                 .user-card:hover {{
                     border-color: #60a5fa;
                     transform: translateY(-2px);
                     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
                 }}
+                
                 .user-link {{
                     display: block;
-                    padding: 30px 20px;
+                    padding: 25px 20px;
                     color: #e4e4e7;
                     text-decoration: none;
-                    font-size: 1.2rem;
+                    font-size: 1.1rem;
                     font-weight: 500;
                     text-align: center;
                     transition: color 0.3s;
                 }}
+                
                 .user-link:hover {{
                     color: #60a5fa;
                 }}
+                
+                .empty-state {{
+                    text-align: center;
+                    padding: 60px 20px;
+                    background-color: #1e293b;
+                    border-radius: 8px;
+                    border: 2px dashed #374151;
+                    margin-bottom: 30px;
+                }}
+                
+                .empty-state h2 {{
+                    color: #f1f5f9;
+                    margin-bottom: 15px;
+                    border: none;
+                }}
+                
+                .empty-state p {{
+                    color: #94a3b8;
+                    margin-bottom: 0;
+                    font-size: 1.1rem;
+                }}
+                
+                @media (max-width: 768px) {{
+                    .symbols-form {{
+                        grid-template-columns: 1fr;
+                    }}
+                    
+                    .force-actions {{
+                        flex-direction: column;
+                    }}
+                    
+                    .force-btn {{
+                        width: 100%;
+                    }}
+                }}
+                
+                /* Toast notifications */
+                #toast-container {{
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    z-index: 1000;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                }}
+                
+                .toast {{
+                    background-color: #334155;
+                    color: #e4e4e7;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    border-left: 4px solid #60a5fa;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                    transform: translateX(400px);
+                    opacity: 0;
+                    transition: all 0.3s ease;
+                    max-width: 350px;
+                    word-wrap: break-word;
+                }}
+                
+                .toast.show {{
+                    transform: translateX(0);
+                    opacity: 1;
+                }}
+                
+                .toast-success {{
+                    border-left-color: #34d399;
+                    background-color: #065f46;
+                }}
+                
+                .toast-error {{
+                    border-left-color: #f87171;
+                    background-color: #7f1d1d;
+                }}
+                
+                .toast-info {{
+                    border-left-color: #60a5fa;
+                    background-color: #1e3a8a;
+                }}
                 </style>
+                
+                <script>
+                var selectedStrategy = null;
+                
+                // Toast notification system
+                function showToast(message, type) {{
+                    if (!type) type = 'info';
+                    
+                    var container = document.getElementById('toast-container');
+                    var toast = document.createElement('div');
+                    toast.className = 'toast toast-' + type;
+                    toast.textContent = message;
+                    
+                    container.appendChild(toast);
+                    
+                    // Trigger animation
+                    setTimeout(function() {{
+                        toast.classList.add('show');
+                    }}, 100);
+                    
+                    // Remove toast after 5 seconds
+                    setTimeout(function() {{
+                        toast.classList.remove('show');
+                        setTimeout(function() {{
+                            if (container.contains(toast)) {{
+                                container.removeChild(toast);
+                            }}
+                        }}, 300);
+                    }}, 5000);
+                }}
+                
+                function onStrategySelect() {{
+                    var select = document.getElementById('strategy-select');
+                    var detailsDiv = document.getElementById('strategy-details');
+                    var strategyNameEl = document.getElementById('selected-strategy-name');
+                    var strategyUsersEl = document.getElementById('strategy-users');
+                    
+                    selectedStrategy = select.value;
+                    
+                    if (selectedStrategy) {{
+                        // Show details section
+                        detailsDiv.style.display = 'block';
+                        strategyNameEl.textContent = selectedStrategy;
+                        
+                        // Fetch strategy details
+                        fetchStrategyDetails(selectedStrategy);
+                        
+                        // Clear symbol inputs
+                        document.getElementById('long-symbol').value = '';
+                        document.getElementById('short-symbol').value = '';
+                    }} else {{
+                        detailsDiv.style.display = 'none';
+                    }}
+                }}
+                
+                function fetchStrategyDetails(strategyName) {{
+                    fetch('/api/strategies/by-name/' + strategyName)
+                    .then(function(response) {{
+                        return response.json();
+                    }})
+                    .then(function(result) {{
+                        if (result.status === 'success') {{
+                            var users = result.strategies.map(function(s) {{ return s.owner; }});
+                            var usersText = 'Users with this strategy: ' + users.join(', ');
+                            document.getElementById('strategy-users').textContent = usersText;
+                            
+                            // Pre-populate symbols if they're consistent across users
+                            var firstStrategy = result.strategies[0];
+                            if (firstStrategy) {{
+                                document.getElementById('long-symbol').value = firstStrategy.long_symbol || '';
+                                document.getElementById('short-symbol').value = firstStrategy.short_symbol || '';
+                            }}
+                        }}
+                    }})
+                    .catch(function(error) {{
+                        console.error('Error fetching strategy details:', error);
+                    }});
+                }}
+                
+                function updateSymbolsForAll() {{
+                    if (!selectedStrategy) {{
+                        showToast('Please select a strategy first', 'error');
+                        return;
+                    }}
+                    
+                    var longSymbol = document.getElementById('long-symbol').value.trim();
+                    var shortSymbol = document.getElementById('short-symbol').value.trim();
+                    
+                    var formData = new FormData();
+                    formData.append('long_symbol', longSymbol);
+                    formData.append('short_symbol', shortSymbol);
+                    
+                    var button = document.querySelector('.update-btn');
+                    button.disabled = true;
+                    button.textContent = 'Updating...';
+                    
+                    fetch('/api/strategies/' + selectedStrategy + '/update-symbols-all', {{
+                        method: 'POST',
+                        body: formData
+                    }})
+                    .then(function(response) {{
+                        return response.json();
+                    }})
+                    .then(function(result) {{
+                        if (result.status === 'success') {{
+                            showToast('Symbols updated for all users with strategy: ' + selectedStrategy, 'success');
+                        }} else {{
+                            showToast('Error: ' + (result.detail || 'Failed to update symbols'), 'error');
+                        }}
+                    }})
+                    .catch(function(error) {{
+                        showToast('Error updating symbols: ' + error.message, 'error');
+                    }})
+                    .finally(function() {{
+                        button.disabled = false;
+                        button.textContent = 'Update Symbols for All Users';
+                    }});
+                }}
+                
+                function forceActionForAll(action) {{
+                    if (!selectedStrategy) {{
+                        showToast('Please select a strategy first', 'error');
+                        return;
+                    }}
+                    
+                    var actionText = action.charAt(0).toUpperCase() + action.slice(1);
+                    var confirmed = confirm('Are you sure you want to force ' + actionText.toUpperCase() + ' for ALL users with strategy "' + selectedStrategy + '"?\\n\\nThis will affect all users who have this strategy.');
+                    
+                    if (!confirmed) {{
+                        return;
+                    }}
+                    
+                    var button = document.querySelector('.force-' + action);
+                    button.disabled = true;
+                    button.textContent = 'Processing...';
+                    
+                    fetch('/api/strategies/' + selectedStrategy + '/force-' + action + '-all', {{
+                        method: 'POST',
+                        headers: {{
+                            'Content-Type': 'application/json'
+                        }}
+                    }})
+                    .then(function(response) {{
+                        return response.json();
+                    }})
+                    .then(function(result) {{
+                        if (result.status === 'success') {{
+                            showToast('Force ' + actionText + ' executed for all users with strategy: ' + selectedStrategy, 'success');
+                        }} else {{
+                            showToast('Error: ' + (result.message || 'Unknown error'), 'error');
+                        }}
+                    }})
+                    .catch(function(error) {{
+                        showToast('Error executing force ' + action + ': ' + error.message, 'error');
+                    }})
+                    .finally(function() {{
+                        button.disabled = false;
+                        button.textContent = 'Force ' + actionText + ' (All Users)';
+                    }});
+                }}
+                </script>
             </body>
         </html>
         """)
@@ -787,6 +1277,170 @@ async def get_user_strategy_logs(username: str, strategy_name: str, skip: int = 
         raise
     except Exception as e:
         logger.exception(f"🔥 ERROR: get_user_strategy_logs error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Master dashboard API endpoints for bulk operations
+@app.get("/api/strategies/by-name/{strategy_name}")
+async def get_strategies_by_name(strategy_name: str):
+    """Get all strategies with a specific name across all users"""
+    try:
+        strategies = strategy_repo.get_strategies_by_name(strategy_name)
+        if not strategies:
+            raise HTTPException(status_code=404, detail=f"No strategies named '{strategy_name}' found")
+        
+        return {
+            "status": "success",
+            "strategy_name": strategy_name,
+            "count": len(strategies),
+            "strategies": [strategy.to_dict() for strategy in strategies]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: get_strategies_by_name error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/strategies/{strategy_name}/update-symbols-all")
+async def update_symbols_for_all_users(
+    strategy_name: str,
+    long_symbol: Optional[str] = Form(""),
+    short_symbol: Optional[str] = Form("")
+):
+    """Update symbols for all users who have a strategy with this name"""
+    try:
+        # Get all strategies with this name
+        strategies = strategy_repo.get_strategies_by_name(strategy_name)
+        if not strategies:
+            raise HTTPException(status_code=404, detail=f"No strategies named '{strategy_name}' found")
+        
+        # Clean up inputs
+        long_symbol = long_symbol.strip() if long_symbol.strip() else None
+        short_symbol = short_symbol.strip() if short_symbol.strip() else None
+        
+        updated_strategies = []
+        failed_updates = []
+        
+        # Update each strategy
+        for strategy in strategies:
+            try:
+                updated_strategy = strategy_repo.update_strategy_symbols_both_by_owner_and_name(
+                    strategy.owner, strategy.name, long_symbol, short_symbol
+                )
+                if updated_strategy:
+                    updated_strategies.append(f"{strategy.owner}/{strategy.name}")
+                else:
+                    failed_updates.append(f"{strategy.owner}/{strategy.name}")
+            except Exception as e:
+                logger.error(f"🔥 ERROR: failed to update symbols for {strategy.owner}/{strategy.name}: {str(e)}")
+                failed_updates.append(f"{strategy.owner}/{strategy.name}")
+        
+        return {
+            "status": "success",
+            "strategy_name": strategy_name,
+            "updated_count": len(updated_strategies),
+            "failed_count": len(failed_updates),
+            "updated_strategies": updated_strategies,
+            "failed_strategies": failed_updates,
+            "symbols": {"long_symbol": long_symbol, "short_symbol": short_symbol}
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: update_symbols_for_all_users error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/strategies/{strategy_name}/force-long-all")
+async def force_long_for_all_users(strategy_name: str, background_tasks: BackgroundTasks):
+    """Force long position for all users who have a strategy with this name"""
+    try:
+        strategies = strategy_repo.get_strategies_by_name(strategy_name)
+        if not strategies:
+            raise HTTPException(status_code=404, detail=f"No strategies named '{strategy_name}' found")
+        
+        # Queue force long tasks for all strategies
+        for strategy in strategies:
+            if not strategy.is_processing:
+                background_tasks.add_task(signal_processor.force_long, strategy)
+                logger.info(f"🔥 MASTER FORCE LONG: queued for {strategy.owner}/{strategy.name}")
+            else:
+                logger.warning(f"🔥 MASTER FORCE LONG: skipped {strategy.owner}/{strategy.name} (already processing)")
+        
+        return {
+            "status": "success",
+            "action": "force_long",
+            "strategy_name": strategy_name,
+            "target_count": len(strategies),
+            "target_users": [s.owner for s in strategies],
+            "message": f"Force long initiated for {len(strategies)} strategies named '{strategy_name}'"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_long_for_all_users error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/strategies/{strategy_name}/force-short-all")
+async def force_short_for_all_users(strategy_name: str, background_tasks: BackgroundTasks):
+    """Force short position for all users who have a strategy with this name"""
+    try:
+        strategies = strategy_repo.get_strategies_by_name(strategy_name)
+        if not strategies:
+            raise HTTPException(status_code=404, detail=f"No strategies named '{strategy_name}' found")
+        
+        # Queue force short tasks for all strategies
+        for strategy in strategies:
+            if not strategy.is_processing:
+                background_tasks.add_task(signal_processor.force_short, strategy)
+                logger.info(f"🔥 MASTER FORCE SHORT: queued for {strategy.owner}/{strategy.name}")
+            else:
+                logger.warning(f"🔥 MASTER FORCE SHORT: skipped {strategy.owner}/{strategy.name} (already processing)")
+        
+        return {
+            "status": "success",
+            "action": "force_short",
+            "strategy_name": strategy_name,
+            "target_count": len(strategies),
+            "target_users": [s.owner for s in strategies],
+            "message": f"Force short initiated for {len(strategies)} strategies named '{strategy_name}'"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_short_for_all_users error={str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/strategies/{strategy_name}/force-close-all")
+async def force_close_for_all_users(strategy_name: str, background_tasks: BackgroundTasks):
+    """Force close all positions for all users who have a strategy with this name"""
+    try:
+        strategies = strategy_repo.get_strategies_by_name(strategy_name)
+        if not strategies:
+            raise HTTPException(status_code=404, detail=f"No strategies named '{strategy_name}' found")
+        
+        # Queue force close tasks for all strategies
+        for strategy in strategies:
+            if not strategy.is_processing:
+                background_tasks.add_task(signal_processor.force_close, strategy)
+                logger.info(f"🔥 MASTER FORCE CLOSE: queued for {strategy.owner}/{strategy.name}")
+            else:
+                logger.warning(f"🔥 MASTER FORCE CLOSE: skipped {strategy.owner}/{strategy.name} (already processing)")
+        
+        return {
+            "status": "success",
+            "action": "force_close",
+            "strategy_name": strategy_name,
+            "target_count": len(strategies),
+            "target_users": [s.owner for s in strategies],
+            "message": f"Force close initiated for {len(strategies)} strategies named '{strategy_name}'"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"🔥 ERROR: force_close_for_all_users error={str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # System endpoints
