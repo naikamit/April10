@@ -1,4 +1,4 @@
-<!-- templates/index.html - User-Specific Dashboard template with New Webhook Structure -->
+<!-- templates/index.html - User-Specific Dashboard template with Optimized Log Loading -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -54,6 +54,50 @@
             font-size: 0.8rem;
             font-family: monospace;
             font-weight: 600;
+        }
+
+        /* Load More button styling */
+        .load-more-logs {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .load-more-btn {
+            background-color: #475569;
+            color: #e4e4e7;
+            border: 1px solid #64748b;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+        
+        .load-more-btn:hover {
+            background-color: #334155;
+            border-color: #94a3b8;
+        }
+        
+        .load-more-btn:disabled {
+            background-color: #1e293b;
+            border-color: #374151;
+            color: #6b7280;
+            cursor: not-allowed;
+        }
+
+        /* Log container styling */
+        .api-logs-container {
+            /* Keep existing styling */
+        }
+        
+        .logs-summary {
+            text-align: center;
+            padding: 10px;
+            background-color: #1e293b;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            color: #94a3b8;
+            font-size: 0.9rem;
         }
     </style>
 </head>
@@ -270,36 +314,62 @@
             <div class="api-section">
                 <div class="api-calls">
                     <h2>API Logs</h2>
-                    {% if strategy.get('api_calls') and strategy.api_calls|length > 0 %}
-                        {% for call in strategy.api_calls|reverse %}
-                            <div class="api-call">
-                                <div class="api-call-header">
-                                    <div class="timestamp-container">
-                                        <div class="timestamp" data-timestamp="{{ call.get('timestamp', '') }}">
-                                            {{ call.get('timestamp', 'Unknown') }}
+                    
+                    <!-- Summary information -->
+                    {% if strategy.get('api_calls_count', 0) > 0 %}
+                        <div class="logs-summary">
+                            Showing {{ strategy.get('api_calls', [])|length }} of {{ strategy.get('api_calls_count', 0) }} total logs
+                            {% if strategy.get('has_more_logs', False) %}
+                                ({{ strategy.get('api_calls_count', 0) - strategy.get('api_calls', [])|length }} older logs available)
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                    
+                    <!-- API Logs Container -->
+                    <div class="api-logs-container" id="api-logs-{{ strategy.get('name', 'unknown') }}">
+                        {% if strategy.get('api_calls') and strategy.api_calls|length > 0 %}
+                            {% for call in strategy.api_calls|reverse %}
+                                <div class="api-call">
+                                    <div class="api-call-header">
+                                        <div class="timestamp-container">
+                                            <div class="timestamp" data-timestamp="{{ call.get('timestamp', '') }}">
+                                                {{ call.get('timestamp', 'Unknown') }}
+                                            </div>
+                                            <div class="timer" data-start="{{ call.get('timestamp', '') }}">
+                                                Calculating...
+                                            </div>
                                         </div>
-                                        <div class="timer" data-start="{{ call.get('timestamp', '') }}">
-                                            Calculating...
+                                        <div class="status {{ call.get('response', {}).get('status', 'unknown') }}">
+                                            {{ call.get('response', {}).get('status', 'Unknown') }}
                                         </div>
                                     </div>
-                                    <div class="status {{ call.get('response', {}).get('status', 'unknown') }}">
-                                        {{ call.get('response', {}).get('status', 'Unknown') }}
+                                    <div class="api-call-content">
+                                        <div class="request">
+                                            <h4>Request</h4>
+                                            <pre>{{ call.get('request', {}) | tojson(indent=2) }}</pre>
+                                        </div>
+                                        <div class="response">
+                                            <h4>Response</h4>
+                                            <pre>{{ call.get('response', {}) | tojson(indent=2) }}</pre>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="api-call-content">
-                                    <div class="request">
-                                        <h4>Request</h4>
-                                        <pre>{{ call.get('request', {}) | tojson(indent=2) }}</pre>
-                                    </div>
-                                    <div class="response">
-                                        <h4>Response</h4>
-                                        <pre>{{ call.get('response', {}) | tojson(indent=2) }}</pre>
-                                    </div>
-                                </div>
-                            </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="no-api-calls">No API calls recorded yet for this strategy</div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="no-api-calls">No API calls recorded yet for this strategy</div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Load More Button -->
+                    {% if strategy.get('has_more_logs', False) %}
+                        <div class="load-more-logs">
+                            <button type="button" class="load-more-btn" 
+                                    onclick="loadMoreLogs('{{ strategy.get('name', 'unknown') }}')"
+                                    data-strategy="{{ strategy.get('name', 'unknown') }}"
+                                    data-loaded="{{ strategy.get('api_calls', [])|length }}">
+                                Load Older Logs ({{ strategy.get('api_calls_count', 0) - strategy.get('api_calls', [])|length }} more)
+                            </button>
+                        </div>
                     {% endif %}
                 </div>
             </div>
