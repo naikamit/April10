@@ -206,13 +206,38 @@ class Strategy:
             "updated_at": self.updated_at.isoformat()
         }
     
-    def to_dict(self) -> dict:
-        """Convert strategy to dictionary for API responses"""
+    def get_recent_api_calls(self, limit: int = 10) -> list:
+        """
+        Get the most recent API calls for this strategy
+        
+        Args:
+            limit: Maximum number of recent calls to return (default: 10)
+            
+        Returns:
+            List of recent API calls (most recent first)
+        """
+        api_calls = getattr(self, 'api_calls', [])
+        return api_calls[-limit:] if api_calls else []
+    
+    def to_dict(self, include_all_logs: bool = False) -> dict:
+        """
+        Convert strategy to dictionary for API responses
+        
+        Args:
+            include_all_logs: If True, include all API calls. If False, only include recent ones.
+        """
         # Ensure display_name exists for backward compatibility
         if not hasattr(self, 'display_name'):
             self.display_name = self.name
         
         cash_info = self.get_cash_balance_info()
+        
+        # Choose which API calls to include based on flag
+        if include_all_logs:
+            api_calls = getattr(self, 'api_calls', [])
+        else:
+            api_calls = self.get_recent_api_calls(10)  # Only last 10 for dashboard
+        
         return {
             "name": self.name,
             "display_name": getattr(self, 'display_name', self.name),
@@ -225,8 +250,9 @@ class Strategy:
             "is_processing": self.is_processing,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
-            "api_calls_count": len(self.api_calls),
-            "api_calls": getattr(self, 'api_calls', [])
+            "api_calls_count": len(getattr(self, 'api_calls', [])),
+            "api_calls": api_calls,
+            "has_more_logs": len(getattr(self, 'api_calls', [])) > 10
         }
     
     def __repr__(self):
