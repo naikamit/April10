@@ -1,4 +1,4 @@
-<!-- templates/index.html - User-Specific Dashboard template with Optimized Log Loading -->
+<!-- templates/index.html - User-Specific Dashboard with Multi-Symbol URLs -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -34,6 +34,60 @@
         
         .webhook-category .webhook-url-group:last-child {
             margin-bottom: 0;
+        }
+
+        .webhook-category h4 {
+            color: #60a5fa;
+            margin: 0 0 15px 0;
+            font-size: 1rem;
+            border-bottom: 1px solid #475569;
+            padding-bottom: 8px;
+        }
+
+        .webhook-description {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        .url-example {
+            font-family: monospace;
+            background: #0f172a;
+            color: #34d399;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+            border: 1px solid #374151;
+        }
+
+        .url-format {
+            color: #fbbf24;
+            font-weight: 500;
+        }
+
+        .execution-order {
+            background: #0f172a;
+            border: 1px solid #374151;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+
+        .execution-step {
+            color: #94a3b8;
+            margin: 3px 0;
+        }
+
+        .execution-step.sell {
+            color: #f87171;
+        }
+
+        .execution-step.buy {
+            color: #34d399;
         }
 
         /* API Logs timestamp styling */
@@ -99,6 +153,32 @@
             color: #94a3b8;
             font-size: 0.9rem;
         }
+
+        .new-format-notice {
+            background: #1e3a8a;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            color: #dbeafe;
+        }
+
+        .new-format-notice h3 {
+            color: #60a5fa;
+            margin: 0 0 10px 0;
+            font-size: 1.1rem;
+        }
+
+        .new-format-notice p {
+            margin: 8px 0;
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+
+        .new-format-notice .highlight {
+            color: #fbbf24;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -145,12 +225,14 @@
                                title="Alphanumeric and underscores only, 3-50 characters">
                     </div>
                     <div class="form-group">
-                        <label for="strategy-long-symbol">Long (optional):</label>
+                        <label for="strategy-long-symbol">Long Symbol (for Force operations):</label>
                         <input type="text" id="strategy-long-symbol" placeholder="e.g., MSTU">
+                        <small>Used for Force Close and manual operations only</small>
                     </div>
                     <div class="form-group">
-                        <label for="strategy-short-symbol">Short (optional):</label>
+                        <label for="strategy-short-symbol">Short Symbol (for Force operations):</label>
                         <input type="text" id="strategy-short-symbol" placeholder="e.g., MSTZ">
+                        <small>Used for Force Close and manual operations only</small>
                     </div>
                     <div class="form-group">
                         <label for="strategy-cash">Initial Cash Balance:</label>
@@ -168,6 +250,13 @@
         {% for strategy in strategies %}
         <div class="strategy-content" id="strategy-{{ strategy.get('name', 'unknown') }}" style="display: none;">
             
+            <!-- New Format Notice -->
+            <div class="new-format-notice">
+                <h3>🚀 Multi-Symbol Webhook URLs</h3>
+                <p>This strategy now supports <span class="highlight">multiple sell symbols</span> in one URL - liquidate multiple positions and consolidate into one!</p>
+                <p><strong>Execution order:</strong> Symbols sell in reverse URL order, then buy with ALL collected cash.</p>
+            </div>
+
             <!-- Cash Balance Section (Options BP) - Moved to top -->
             <div class="cash-section">
                 <div class="cash-card">
@@ -201,32 +290,109 @@
                 </div>
             </div>
 
-            <!-- Webhook URLs Section -->
+            <!-- Multi-Symbol Webhook URLs Section -->
             <div class="webhook-section">
                 <div class="webhook-card">
-                    <h2>Webhooks</h2>
+                    <h2>Multi-Symbol Webhook URLs</h2>
                     
-                    <!-- User-Specific Webhooks -->
+                    <!-- Portfolio Liquidation -->
                     <div class="webhook-category">
+                        <h4>💰 Portfolio Liquidation & Consolidation</h4>
+                        <div class="webhook-description">
+                            Sell multiple positions and consolidate into one. Format: <span class="url-format">/{{ username }}/{{ strategy.get('name', 'unknown') }}/BUY_SYMBOL/SELL1/SELL2/SELL3</span>
+                        </div>
+                        
                         <div class="webhook-url-group">
-                            <label>Long:</label>
+                            <label>Liquidate 3 positions → Buy MSTU:</label>
                             <div class="url-input-group">
-                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/long" id="user-long-url-{{ strategy.get('name', 'unknown') }}">
-                                <button onclick="copyToClipboard('user-long-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/MSTU/MSTZ/SQQQ/TQQQ" id="liquidate-example1-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('liquidate-example1-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL TQQQ positions</div>
+                                <div class="execution-step sell">2. Sell ALL SQQQ positions</div>
+                                <div class="execution-step sell">3. Sell ALL MSTZ positions</div>
+                                <div class="execution-step buy">4. Buy MSTU with ALL collected cash</div>
                             </div>
                         </div>
+
                         <div class="webhook-url-group">
-                            <label>Short:</label>
+                            <label>Liquidate 2 positions → Buy SQQQ:</label>
                             <div class="url-input-group">
-                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/short" id="user-short-url-{{ strategy.get('name', 'unknown') }}">
-                                <button onclick="copyToClipboard('user-short-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/SQQQ/MSTU/TQQQ" id="liquidate-example2-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('liquidate-example2-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL TQQQ positions</div>
+                                <div class="execution-step sell">2. Sell ALL MSTU positions</div>
+                                <div class="execution-step buy">3. Buy SQQQ with ALL collected cash</div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Single Swap -->
+                    <div class="webhook-category">
+                        <h4>🔄 Position Swaps</h4>
+                        <div class="webhook-description">
+                            Swap one position for another. Format: <span class="url-format">/{{ username }}/{{ strategy.get('name', 'unknown') }}/BUY_SYMBOL/SELL_SYMBOL</span>
+                        </div>
+                        
                         <div class="webhook-url-group">
-                            <label>Close:</label>
+                            <label>Swap MSTZ → MSTU:</label>
                             <div class="url-input-group">
-                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/close" id="user-close-url-{{ strategy.get('name', 'unknown') }}">
-                                <button onclick="copyToClipboard('user-close-url-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/MSTU/MSTZ" id="swap-example1-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('swap-example1-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL MSTZ positions</div>
+                                <div class="execution-step buy">2. Buy MSTU with ALL proceeds + existing cash</div>
+                            </div>
+                        </div>
+
+                        <div class="webhook-url-group">
+                            <label>Swap TQQQ → SQQQ:</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/SQQQ/TQQQ" id="swap-example2-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('swap-example2-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL TQQQ positions</div>
+                                <div class="execution-step buy">2. Buy SQQQ with ALL proceeds + existing cash</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Close Only Operations -->
+                    <div class="webhook-category">
+                        <h4>🚫 Close Only (No Buying)</h4>
+                        <div class="webhook-description">
+                            Close multiple positions without buying anything. Format: <span class="url-format">/{{ username }}/{{ strategy.get('name', 'unknown') }}/none/SELL1/SELL2/SELL3</span>
+                        </div>
+                        
+                        <div class="webhook-url-group">
+                            <label>Close 3 positions (cash only):</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/none/MSTZ/SQQQ/TQQQ" id="close-example1-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('close-example1-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL TQQQ positions</div>
+                                <div class="execution-step sell">2. Sell ALL SQQQ positions</div>
+                                <div class="execution-step sell">3. Sell ALL MSTZ positions</div>
+                                <div class="execution-step">4. Hold ALL cash (no buying)</div>
+                            </div>
+                        </div>
+
+                        <div class="webhook-url-group">
+                            <label>Close 2 positions (cash only):</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/none/MSTU/AAPL" id="close-example2-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('close-example2-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL AAPL positions</div>
+                                <div class="execution-step sell">2. Sell ALL MSTU positions</div>
+                                <div class="execution-step">3. Hold ALL cash (no buying)</div>
                             </div>
                         </div>
                     </div>
@@ -236,7 +402,10 @@
             <!-- Trading Symbols Section -->
             <div class="symbols-section">
                 <div class="symbols-card">
-                    <h2>Symbols</h2>
+                    <h2>Dashboard Symbols (Force Operations Only)</h2>
+                    <div class="webhook-description" style="margin-bottom: 15px;">
+                        These symbols are only used for Force Close and manual operations below. Webhooks use symbols from URLs.
+                    </div>
                     <div class="symbol-display">
                         <div class="symbol-item">
                             <span class="label">Long:</span>
@@ -249,7 +418,7 @@
                     </div>
                     
                     <form class="update-form">
-                        <h3>Update Symbols</h3>
+                        <h3>Update Dashboard Symbols</h3>
                         <div class="symbols-form-group">
                             <div class="form-field">
                                 <label>Long:</label>
@@ -272,7 +441,10 @@
             <!-- Manual Trading Section -->
             <div class="manual-section">
                 <div class="manual-card">
-                    <h2>Override</h2>
+                    <h2>Override (Uses Dashboard Symbols)</h2>
+                    <div class="webhook-description" style="margin-bottom: 15px;">
+                        These operations use the dashboard symbols configured above.
+                    </div>
                     <div class="manual-controls">
                         <button type="button" class="manual-btn force-long" onclick="forceStrategyLong('{{ strategy.get('name', 'unknown') }}')">Force Long</button>
                         <button type="button" class="manual-btn force-short" onclick="forceStrategyShort('{{ strategy.get('name', 'unknown') }}')">Force Short</button>
