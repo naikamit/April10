@@ -56,6 +56,17 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # New Dynamic Multi-Symbol Webhook Endpoints
 
+# Broadcast webhooks MUST come FIRST (before user-specific routes)
+@app.post("/cast/{strategy_name}/{symbols:path}")
+async def webhook_broadcast_multi_symbol(
+    strategy_name: str, 
+    symbols: str, 
+    request: Request, 
+    background_tasks: BackgroundTasks
+):
+    """Broadcast webhook for buy/sell operations with multiple symbols"""
+    return await _process_broadcast_multi_symbol_webhook(strategy_name, symbols, request, background_tasks)
+
 # User-specific webhooks - buy/sell operations with variable sell symbols
 @app.post("/{username}/{strategy_name}/{symbols:path}")
 async def webhook_user_multi_symbol(
@@ -67,17 +78,6 @@ async def webhook_user_multi_symbol(
 ):
     """User-specific webhook for buy/sell operations with multiple symbols"""
     return await _process_user_multi_symbol_webhook(username, strategy_name, symbols, request, background_tasks)
-
-# Broadcast webhooks - buy/sell operations with variable sell symbols
-@app.post("/cast/{strategy_name}/{symbols:path}")
-async def webhook_broadcast_multi_symbol(
-    strategy_name: str, 
-    symbols: str, 
-    request: Request, 
-    background_tasks: BackgroundTasks
-):
-    """Broadcast webhook for buy/sell operations with multiple symbols"""
-    return await _process_broadcast_multi_symbol_webhook(strategy_name, symbols, request, background_tasks)
 
 def _parse_symbol_path(symbols: str) -> tuple:
     """
