@@ -1,122 +1,571 @@
-<!-- templates/index.html - Dashboard template -->
+<!-- templates/index.html - User-Specific Dashboard with Multi-Symbol URLs -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trading Webhook Dashboard</title>
+    <title>{{ username|capitalize }} - RetardTrader</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    
     <link rel="stylesheet" href="/static/style.css">
     <meta http-equiv="refresh" content="60">
+    <style>
+        /* Webhook categories styling */
+        .webhook-category {
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #1e293b;
+            border-radius: 6px;
+            border: 1px solid #475569;
+        }
+        
+        .webhook-category:last-child {
+            margin-bottom: 0;
+        }
+        
+        .webhook-category .webhook-url-group {
+            margin-bottom: 12px;
+        }
+        
+        .webhook-category .webhook-url-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .webhook-category h4 {
+            color: #60a5fa;
+            margin: 0 0 15px 0;
+            font-size: 1rem;
+            border-bottom: 1px solid #475569;
+            padding-bottom: 8px;
+        }
+
+        .webhook-description {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        .url-example {
+            font-family: monospace;
+            background: #0f172a;
+            color: #34d399;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+            border: 1px solid #374151;
+        }
+
+        .url-format {
+            color: #fbbf24;
+            font-weight: 500;
+        }
+
+        .execution-order {
+            background: #0f172a;
+            border: 1px solid #374151;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+
+        .execution-step {
+            color: #94a3b8;
+            margin: 3px 0;
+        }
+
+        .execution-step.sell {
+            color: #f87171;
+        }
+
+        .execution-step.buy {
+            color: #34d399;
+        }
+
+        /* API Logs timestamp styling */
+        .timestamp-container {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .timestamp {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .timer {
+            color: #60a5fa;
+            font-size: 0.8rem;
+            font-family: monospace;
+            font-weight: 600;
+        }
+
+        /* Load More button styling */
+        .load-more-logs {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .load-more-btn {
+            background-color: #475569;
+            color: #e4e4e7;
+            border: 1px solid #64748b;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+        
+        .load-more-btn:hover {
+            background-color: #334155;
+            border-color: #94a3b8;
+        }
+        
+        .load-more-btn:disabled {
+            background-color: #1e293b;
+            border-color: #374151;
+            color: #6b7280;
+            cursor: not-allowed;
+        }
+
+        /* Log container styling */
+        .api-logs-container {
+            /* Keep existing styling */
+        }
+        
+        .logs-summary {
+            text-align: center;
+            padding: 10px;
+            background-color: #1e293b;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+
+        .new-format-notice {
+            background: #1e3a8a;
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            color: #dbeafe;
+        }
+
+        .new-format-notice h3 {
+            color: #60a5fa;
+            margin: 0 0 10px 0;
+            font-size: 1.1rem;
+        }
+
+        .new-format-notice p {
+            margin: 8px 0;
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+
+        .new-format-notice .highlight {
+            color: #fbbf24;
+            font-weight: 500;
+        }
+    </style>
 </head>
 <body>
+    <div id="toast-container"></div>
+
     <div class="container">
-        <h1>Trading Webhook Dashboard</h1>
-        
-        <div class="status-section">
-            <h2>System Status</h2>
-            <div class="status-card">
-                <div class="status-item">
-                    <span class="label">Long Symbol:</span>
-                    <span class="value">{{ long_symbol if long_symbol else "Not set" }}</span>
+        <!-- Strategy Tabs -->
+        <div class="tabs-container">
+            <div class="tabs-header">
+                {% for strategy in strategies %}
+                <div class="tab-button" data-strategy="{{ strategy.get('name', 'unknown') }}" onclick="switchToStrategy('{{ strategy.get('name', 'unknown') }}')">
+                    <span class="tab-name">{{ strategy.get('display_name', strategy.get('name', 'Unknown')) }}</span>
                 </div>
-                <div class="status-item">
-                    <span class="label">Short Symbol:</span>
-                    <span class="value">{{ short_symbol if short_symbol else "Not set" }}</span>
-                </div>
-                <div class="status-item">
-                    <span class="label">Processing Signal:</span>
-                    <span class="value {% if is_processing %}active{% endif %}">
-                        {{ "Yes" if is_processing else "No" }}
-                    </span>
+                {% endfor %}
+                <div class="tab-button tab-create" onclick="showCreateStrategy()">
+                    <span class="tab-name">+</span>
                 </div>
             </div>
         </div>
-        
-        <div class="cash-section">
-            <h2>Cash Balance</h2>
-            <div class="cash-card">
-                <div class="cash-amount">${{ "%.2f"|format(cash_info.balance) }}</div>
-                <div class="cash-details">
-                    <div>Source: {{ cash_info.source }}</div>
-                    <div>Last updated: 
-                        {% if cash_info.staleness.days > 0 %}
-                            {{ cash_info.staleness.days }} days
-                        {% endif %}
-                        {% if cash_info.staleness.hours > 0 %}
-                            {{ cash_info.staleness.hours }} hours
-                        {% endif %}
-                        {{ cash_info.staleness.minutes }} minutes ago
-                    </div>
+
+        <!-- Empty State (when no strategies exist) -->
+        {% if not strategies %}
+        <div class="empty-state">
+            <h2>No Strategies Found</h2>
+            <p>Create your first strategy to get started</p>
+            <button class="create-strategy-btn" onclick="showCreateStrategy()">Create Your First Strategy</button>
+        </div>
+        {% endif %}
+
+        <!-- Create Strategy Form -->
+        <div id="create-strategy-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Create New Strategy</h3>
+                    <span class="modal-close" onclick="hideCreateStrategy()">&times;</span>
                 </div>
-                
-                <form action="/update-cash" method="post" class="update-form">
-                    <h3>Update Cash Balance</h3>
+                <form id="create-strategy-form">
+                    <input type="hidden" id="strategy-owner" value="{{ username }}">
                     <div class="form-group">
-                        <input type="number" name="cash_amount" step="0.01" required placeholder="Enter new balance">
-                        <button type="submit">Update</button>
+                        <label for="strategy-name">Strategy Name:</label>
+                        <input type="text" id="strategy-name" required 
+                               placeholder="e.g., momentum_strategy" 
+                               pattern="[a-zA-Z0-9_]{3,50}"
+                               title="Alphanumeric and underscores only, 3-50 characters">
+                    </div>
+                    <div class="form-group">
+                        <label for="strategy-long-symbol">Long Symbol (for Force operations):</label>
+                        <input type="text" id="strategy-long-symbol" placeholder="e.g., MSTU">
+                        <small>Used for Force Close and manual operations only</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="strategy-short-symbol">Short Symbol (for Force operations):</label>
+                        <input type="text" id="strategy-short-symbol" placeholder="e.g., MSTZ">
+                        <small>Used for Force Close and manual operations only</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="strategy-cash">Initial Cash Balance:</label>
+                        <input type="number" id="strategy-cash" step="0.01" value="0" min="0">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" onclick="hideCreateStrategy()">Cancel</button>
+                        <button type="submit">Create Strategy</button>
                     </div>
                 </form>
             </div>
         </div>
-        
-        <div class="cooldown-section">
-            <h2>Cooldown Status</h2>
-            <div class="cooldown-card">
-                {% if cooldown_info.active %}
-                    <div class="cooldown-active">
-                        <div class="cooldown-label">Cooldown Active</div>
-                        <div class="cooldown-timer">
-                            Time remaining: {{ cooldown_info.remaining.hours }}h {{ cooldown_info.remaining.minutes }}m
-                        </div>
-                        <div class="cooldown-end">
-                            Ends at: {{ cooldown_info.end_time }}
+
+        <!-- Strategy Content Tabs -->
+        {% for strategy in strategies %}
+        <div class="strategy-content" id="strategy-{{ strategy.get('name', 'unknown') }}" style="display: none;">
+            
+            <!-- New Format Notice -->
+            <div class="new-format-notice">
+                <h3>🚀 Multi-Symbol Webhook URLs</h3>
+                <p>This strategy now supports <span class="highlight">multiple sell symbols</span> in one URL - liquidate multiple positions and consolidate into one!</p>
+                <p><strong>Execution order:</strong> Symbols sell in reverse URL order, then buy with ALL collected cash.</p>
+            </div>
+
+            <!-- Cash Balance Section (Options BP) - Moved to top -->
+            <div class="cash-section">
+                <div class="cash-card">
+                    <h2>Options BP</h2>
+                    <div class="cash-amount">${{ "%.2f"|format(strategy.get('cash_balance', 0) or 0) }}</div>
+                    <div class="cash-details">
+                        <div>Strategy: {{ strategy.get('display_name', strategy.get('name', 'Unknown')) }}</div>
+                        <div>Last updated: 
+                            {% if strategy.get('cash_info') and strategy.cash_info.get('staleness') %}
+                                {% set staleness = strategy.cash_info.staleness %}
+                                {% if staleness.get('days', 0) > 0 %}
+                                    {{ staleness.days }} days
+                                {% endif %}
+                                {% if staleness.get('hours', 0) > 0 %}
+                                    {{ staleness.hours }} hours
+                                {% endif %}
+                                {{ staleness.get('minutes', 0) }} minutes ago
+                            {% else %}
+                                Just now
+                            {% endif %}
                         </div>
                     </div>
-                {% else %}
-                    <div class="cooldown-inactive">
-                        <div class="cooldown-label">Cooldown Inactive</div>
-                        <div>Ready to process signals normally</div>
-                    </div>
-                {% endif %}
+                    
+                    <form class="update-form">
+                        <div class="form-group">
+                            <input type="number" class="cash-amount-input" step="0.01" required 
+                                   placeholder="Enter new balance">
+                            <button type="button" onclick="updateStrategyCash('{{ strategy.get('name', 'unknown') }}')">Update</button>
+                        </div>
+                    </form>
+                </div>
             </div>
-        </div>
-        
-        <div class="api-section">
-            <h2>API Call History</h2>
-            <div class="api-calls">
-                {% if api_calls %}
-                    {% for call in api_calls|reverse %}
-                        <div class="api-call">
-                            <div class="api-call-header">
-                                <div class="timestamp">{{ call.timestamp }}</div>
-                                <div class="status {{ call.response.status if call.response.status else 'unknown' }}">
-                                    {{ call.response.status if call.response.status else "Unknown" }}
-                                </div>
+
+            <!-- Multi-Symbol Webhook URLs Section -->
+            <div class="webhook-section">
+                <div class="webhook-card">
+                    <h2>Multi-Symbol Webhook URLs</h2>
+                    
+                    <!-- Portfolio Liquidation -->
+                    <div class="webhook-category">
+                        <h4>💰 Portfolio Liquidation & Consolidation</h4>
+                        <div class="webhook-description">
+                            Sell multiple positions and consolidate into one. Format: <span class="url-format">/{{ username }}/{{ strategy.get('name', 'unknown') }}/BUY_SYMBOL/SELL1/SELL2/SELL3</span>
+                        </div>
+                        
+                        <div class="webhook-url-group">
+                            <label>Liquidate 3 positions → Buy MSTU:</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/MSTU/MSTZ/SQQQ/TQQQ" id="liquidate-example1-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('liquidate-example1-{{ strategy.get('name', 'unknown') }}')">Copy</button>
                             </div>
-                            <div class="api-call-content">
-                                <div class="request">
-                                    <h4>Request</h4>
-                                    <pre>{{ call.request | tojson(indent=2) }}</pre>
-                                </div>
-                                <div class="response">
-                                    <h4>Response</h4>
-                                    <pre>{{ call.response | tojson(indent=2) }}</pre>
-                                </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL TQQQ positions</div>
+                                <div class="execution-step sell">2. Sell ALL SQQQ positions</div>
+                                <div class="execution-step sell">3. Sell ALL MSTZ positions</div>
+                                <div class="execution-step buy">4. Buy MSTU with ALL collected cash</div>
                             </div>
                         </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="no-api-calls">No API calls recorded yet</div>
-                {% endif %}
+
+                        <div class="webhook-url-group">
+                            <label>Liquidate 2 positions → Buy SQQQ:</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/SQQQ/MSTU/TQQQ" id="liquidate-example2-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('liquidate-example2-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL TQQQ positions</div>
+                                <div class="execution-step sell">2. Sell ALL MSTU positions</div>
+                                <div class="execution-step buy">3. Buy SQQQ with ALL collected cash</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Single Swap -->
+                    <div class="webhook-category">
+                        <h4>🔄 Position Swaps</h4>
+                        <div class="webhook-description">
+                            Swap one position for another. Format: <span class="url-format">/{{ username }}/{{ strategy.get('name', 'unknown') }}/BUY_SYMBOL/SELL_SYMBOL</span>
+                        </div>
+                        
+                        <div class="webhook-url-group">
+                            <label>Swap MSTZ → MSTU:</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/MSTU/MSTZ" id="swap-example1-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('swap-example1-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL MSTZ positions</div>
+                                <div class="execution-step buy">2. Buy MSTU with ALL proceeds + existing cash</div>
+                            </div>
+                        </div>
+
+                        <div class="webhook-url-group">
+                            <label>Swap TQQQ → SQQQ:</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/SQQQ/TQQQ" id="swap-example2-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('swap-example2-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL TQQQ positions</div>
+                                <div class="execution-step buy">2. Buy SQQQ with ALL proceeds + existing cash</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Close Only Operations -->
+                    <div class="webhook-category">
+                        <h4>🚫 Close Only (No Buying)</h4>
+                        <div class="webhook-description">
+                            Close multiple positions without buying anything. Format: <span class="url-format">/{{ username }}/{{ strategy.get('name', 'unknown') }}/none/SELL1/SELL2/SELL3</span>
+                        </div>
+                        
+                        <div class="webhook-url-group">
+                            <label>Close 3 positions (cash only):</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/none/MSTZ/SQQQ/TQQQ" id="close-example1-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('close-example1-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL TQQQ positions</div>
+                                <div class="execution-step sell">2. Sell ALL SQQQ positions</div>
+                                <div class="execution-step sell">3. Sell ALL MSTZ positions</div>
+                                <div class="execution-step">4. Hold ALL cash (no buying)</div>
+                            </div>
+                        </div>
+
+                        <div class="webhook-url-group">
+                            <label>Close 2 positions (cash only):</label>
+                            <div class="url-input-group">
+                                <input type="text" readonly value="{{ request.base_url }}{{ username }}/{{ strategy.get('name', 'unknown') }}/none/MSTU/AAPL" id="close-example2-{{ strategy.get('name', 'unknown') }}">
+                                <button onclick="copyToClipboard('close-example2-{{ strategy.get('name', 'unknown') }}')">Copy</button>
+                            </div>
+                            <div class="execution-order">
+                                <div class="execution-step sell">1. Sell ALL AAPL positions</div>
+                                <div class="execution-step sell">2. Sell ALL MSTU positions</div>
+                                <div class="execution-step">3. Hold ALL cash (no buying)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trading Symbols Section -->
+            <div class="symbols-section">
+                <div class="symbols-card">
+                    <h2>Dashboard Symbols (Force Operations Only)</h2>
+                    <div class="webhook-description" style="margin-bottom: 15px;">
+                        These symbols are only used for Force Close and manual operations below. Webhooks use symbols from URLs.
+                    </div>
+                    <div class="symbol-display">
+                        <div class="symbol-item">
+                            <span class="label">Long:</span>
+                            <span class="symbol-value">{{ strategy.get('long_symbol') or "Not set" }}</span>
+                        </div>
+                        <div class="symbol-item">
+                            <span class="label">Short:</span>
+                            <span class="symbol-value">{{ strategy.get('short_symbol') or "Not set" }}</span>
+                        </div>
+                    </div>
+                    
+                    <form class="update-form">
+                        <h3>Update Dashboard Symbols</h3>
+                        <div class="symbols-form-group">
+                            <div class="form-field">
+                                <label>Long:</label>
+                                <input type="text" class="long-symbol-input" 
+                                       value="{{ strategy.get('long_symbol') or '' }}" 
+                                       placeholder="e.g., MSTU">
+                            </div>
+                            <div class="form-field">
+                                <label>Short:</label>
+                                <input type="text" class="short-symbol-input" 
+                                       value="{{ strategy.get('short_symbol') or '' }}" 
+                                       placeholder="e.g., MSTZ">
+                            </div>
+                            <button type="button" onclick="updateStrategySymbols('{{ strategy.get('name', 'unknown') }}')">Update</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Manual Trading Section -->
+            <div class="manual-section">
+                <div class="manual-card">
+                    <h2>Override (Uses Dashboard Symbols)</h2>
+                    <div class="webhook-description" style="margin-bottom: 15px;">
+                        These operations use the dashboard symbols configured above.
+                    </div>
+                    <div class="manual-controls">
+                        <button type="button" class="manual-btn force-long" onclick="forceStrategyLong('{{ strategy.get('name', 'unknown') }}')">Force Long</button>
+                        <button type="button" class="manual-btn force-short" onclick="forceStrategyShort('{{ strategy.get('name', 'unknown') }}')">Force Short</button>
+                        <button type="button" class="manual-btn force-close" onclick="forceStrategyClose('{{ strategy.get('name', 'unknown') }}')">Force Close</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Cooldown Section -->
+            <div class="cooldown-section">
+                <div class="cooldown-card">
+                    <h2>Cooldown</h2>
+                    {% set cooldown = strategy.get('cooldown', {}) %}
+                    {% if cooldown.get('active') %}
+                        <div class="cooldown-active">
+                            <div class="cooldown-label">Cooldown Active</div>
+                            <div class="cooldown-timer">
+                                Time remaining: {{ cooldown.get('remaining', {}).get('hours', 0) }}h {{ cooldown.get('remaining', {}).get('minutes', 0) }}m
+                            </div>
+                            <div class="cooldown-end">
+                                Ends at: {{ cooldown.get('end_time', 'Unknown') }}
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="cooldown-inactive">
+                            <div class="cooldown-label">Cooldown Inactive</div>
+                            <div>Ready to process signals normally</div>
+                        </div>
+                    {% endif %}
+                    
+                    <div class="cooldown-controls">
+                        <button type="button" class="cooldown-btn" onclick="startStrategyCooldown('{{ strategy.get('name', 'unknown') }}')">Start Cooldown</button>
+                        <button type="button" class="cooldown-btn" onclick="stopStrategyCooldown('{{ strategy.get('name', 'unknown') }}')">Stop Cooldown</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- API Call History Section -->
+            <div class="api-section">
+                <div class="api-calls">
+                    <h2>API Logs</h2>
+                    
+                    <!-- Summary information -->
+                    {% if strategy.get('api_calls_count', 0) > 0 %}
+                        <div class="logs-summary">
+                            Showing {{ strategy.get('api_calls', [])|length }} of {{ strategy.get('api_calls_count', 0) }} total logs
+                            {% if strategy.get('has_more_logs', False) %}
+                                ({{ strategy.get('api_calls_count', 0) - strategy.get('api_calls', [])|length }} older logs available)
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                    
+                    <!-- API Logs Container -->
+                    <div class="api-logs-container" id="api-logs-{{ strategy.get('name', 'unknown') }}">
+                        {% if strategy.get('api_calls') and strategy.api_calls|length > 0 %}
+                            {% for call in strategy.api_calls|reverse %}
+                                <div class="api-call">
+                                    <div class="api-call-header">
+                                        <div class="timestamp-container">
+                                            <div class="timestamp" data-timestamp="{{ call.get('timestamp', '') }}">
+                                                {{ call.get('timestamp', 'Unknown') }}
+                                            </div>
+                                            <div class="timer" data-start="{{ call.get('timestamp', '') }}">
+                                                Calculating...
+                                            </div>
+                                        </div>
+                                        <div class="status {{ call.get('response', {}).get('status', 'unknown') }}">
+                                            {{ call.get('response', {}).get('status', 'Unknown') }}
+                                        </div>
+                                    </div>
+                                    <div class="api-call-content">
+                                        <div class="request">
+                                            <h4>Request</h4>
+                                            <pre>{{ call.get('request', {}) | tojson(indent=2) }}</pre>
+                                        </div>
+                                        <div class="response">
+                                            <h4>Response</h4>
+                                            <pre>{{ call.get('response', {}) | tojson(indent=2) }}</pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="no-api-calls">No API calls recorded yet for this strategy</div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Load More Button -->
+                    {% if strategy.get('has_more_logs', False) %}
+                        <div class="load-more-logs">
+                            <button type="button" class="load-more-btn" 
+                                    onclick="loadMoreLogs('{{ strategy.get('name', 'unknown') }}')"
+                                    data-strategy="{{ strategy.get('name', 'unknown') }}"
+                                    data-loaded="{{ strategy.get('api_calls', [])|length }}">
+                                Load Older Logs ({{ strategy.get('api_calls_count', 0) - strategy.get('api_calls', [])|length }} more)
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Strategy Actions -->
+            <div class="strategy-actions">
+                <button type="button" class="delete-strategy-btn" onclick="deleteStrategy('{{ strategy.get('name', 'unknown') }}')">Delete Strategy</button>
             </div>
         </div>
+        {% endfor %}
     </div>
-    
+
+    <script src="/static/dashboard.js"></script>
     <script>
-        // Automatically refresh the page every minute
-        setTimeout(function() {
-            window.location.reload();
-        }, 60000);
+        // Set current username for API calls
+        setCurrentUsername('{{ username }}');
+        
+        // Initialize the first tab or show empty state
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if strategies %}
+                {% set first_strategy = strategies[0] %}
+                switchToStrategy('{{ first_strategy.get('name', 'unknown') }}');
+            {% endif %}
+        });
     </script>
 </body>
 </html>
