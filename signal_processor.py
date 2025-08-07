@@ -106,11 +106,23 @@ class SignalProcessor:
             logger.info(f"🔥 ALL-CASH BUYING: strategy={strategy.name} owner={strategy.owner} symbol={symbol} insufficient_cash={available_cash}")
             return
         
-        # Buy 1 share to get current price
-        success, price, response = await self.api_client.buy_symbol(symbol, 1, strategy)
-        
+        # Buy 1 share to get current price (with retry for market open conditions)
+        success, price, response = None, None, None
+        retries = 0
+        while retries < MAX_BUY_RETRIES:
+            success, price, response = await self.api_client.buy_symbol(symbol, 1, strategy)
+            
+            if success and price is not None:
+                # Got filled order with price, proceed
+                break
+            
+            retries += 1
+            if retries < MAX_BUY_RETRIES:
+                logger.info(f"🔥 ALL-CASH BUYING RETRY: strategy={strategy.name} owner={strategy.owner} symbol={symbol} retry={retries}/{MAX_BUY_RETRIES} waiting_for_fill")
+                await asyncio.sleep(3)  # Wait before retry
+
         if not success or price is None:
-            logger.error(f"🔥 ERROR: strategy={strategy.name} owner={strategy.owner} symbol={symbol} failed_to_get_price_for_all_cash_buy")
+            logger.error(f"🔥 ERROR: strategy={strategy.name} owner={strategy.owner} symbol={symbol} failed_to_get_price_after_{MAX_BUY_RETRIES}_retries")
             return
         
         # Update cash balance after the 1-share purchase
